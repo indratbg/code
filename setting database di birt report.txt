@@ -1,0 +1,4 @@
+driver class
+oracle.jdbc.driver.OracleDriver (v10.2)
+
+database url jdbc:oracle:thin:@192.168.8.200:1521:orclbo

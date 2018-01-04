@@ -1,0 +1,1 @@
+alter table t_interest add(upd_by varchar2(10),APPROVED_STS char(1),approved_by varchar2(10),approved_dt date)

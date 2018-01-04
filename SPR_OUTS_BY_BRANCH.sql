@@ -1,0 +1,126 @@
+create or replace PROCEDURE SPR_OUTS_BY_BRANCH(
+    P_END_DATE      DATE,
+    P_BGN_BRANCH VARCHAR2,
+  P_END_BRANCH VARCHAR2,
+    P_BGN_REM_CD VARCHAR2,
+    P_END_REM_CD VARCHAR2,
+    P_USER_ID       VARCHAR2,
+    P_GENERATE_DATE DATE,
+    P_RAND_VALUE OUT NUMBER,
+    P_ERROR_CODE OUT NUMBER,
+    P_ERROR_MSG OUT VARCHAR2)
+IS
+  V_ERROR_CODE   NUMBER(5);
+  V_ERROR_MSG    VARCHAR2(200);
+  V_ERR          EXCEPTION;
+  V_RANDOM_VALUE NUMBER(10);
+
+
+  V_FROM_DATE DATE;
+BEGIN
+
+  V_RANDOM_VALUE := ABS(DBMS_RANDOM.RANDOM);
+  
+  BEGIN
+    SP_RPT_REMOVE_RAND('R_OUTS_BY_BRANCH',V_RANDOM_VALUE,V_ERROR_MSG,V_ERROR_CODE);
+  EXCEPTION
+  WHEN OTHERS THEN
+    V_ERROR_CODE := -10;
+    V_ERROR_MSG  := SUBSTR('SP_RPT_REMOVE_RAND '||SQLERRM(SQLCODE),1,200);
+    RAISE V_err;
+  END;
+  
+  IF V_ERROR_CODE <0 THEN
+    V_ERROR_CODE := -20;
+    V_ERROR_MSG  := SUBSTR('SP_RPT_REMOVE_RAND'||V_ERROR_MSG,1,200);
+    RAISE V_ERR;
+  END IF;
+  
+
+BEGIN
+select ddate1 into V_FROM_DATE
+    from mst_sys_param
+    where param_id = 'AGING_MKBD51_103'
+    and param_cd1 = 'FROMDATE';
+EXCEPTION
+  WHEN OTHERS THEN
+    V_ERROR_CODE := -10;
+    V_ERROR_MSG  := SUBSTR('SELECT BEGIN DATE FROM MST_SYS_PARAM '||SQLERRM(SQLCODE),1,200);
+    RAISE V_err;
+  END;
+  
+  BEGIN
+    INSERT
+    INTO R_OUTS_BY_BRANCH
+      (
+CLIENT_CD,
+CLIENT_NAME,
+REM_CD,
+REM_NAME,
+BRANCH_CD,
+BRANCH_NAME,
+OUTS_AMT,
+RAND_VALUE,
+USER_ID,
+GENERATE_DATE
+      )
+      SELECT m.client_cd,m.client_name,m.rem_cd,m.rem_name,m.brch_cd,m.brch_name, a.end_bal, V_RANDOM_VALUE,P_USER_ID,P_GENERATE_DATE
+FROM
+  (
+    SELECT SL_Acct_cd client_cd, SUM(end_bal) end_bal
+    FROM
+      (
+        SELECT A.SL_ACCT_CD, DECODE(A.DB_CR_FLG,'D',CURR_VAL,-CURR_VAL) END_BAL
+        FROM t_account_ledger a
+        WHERE a.doc_date BETWEEN V_FROM_DATE AND P_END_DATE
+        AND trim(a.gl_acct_cd) = '1424'
+        AND a.approved_sts     = 'A'
+        --AND a.sl_acct_cd BETWEEN :P_BGN_SUB AND :P_END_SUB
+        UNION ALL
+        SELECT B.SL_ACCT_CD, NVL(b.deb_obal,0) - NVL(b.cre_obal,0) beg_bal
+        FROM t_day_trs b
+        WHERE b.trs_dt         = V_FROM_DATE
+        AND trim(b.gl_acct_cd) = '1424'
+        --AND b.sl_acct_cd BETWEEN :P_BGN_SUB AND :P_END_SUB
+      )
+    GROUP BY SL_Acct_cd
+    HAVING SUM(end_bal) <>0
+  )
+  A, (
+    SELECT A.CLIENT_CD,A.CLIENT_NAME,B.BRCH_CD,B.BRCH_NAME,A.REM_CD,S.REM_NAME
+    FROM MST_CLIENT A
+    JOIN MST_SALES S
+    ON A.REM_CD=S.REM_CD
+    JOIN MST_BRANCH B
+    ON TRIM(A.BRANCH_CODE) = B.BRCH_CD
+    WHERE A.APPROVED_STAT  ='A'
+    AND S.APPROVED_STAT    ='A'
+    AND B.APPROVED_STAT    ='A'
+  )
+  M
+WHERE a.client_cd=m.client_cd
+AND m.brch_cd BETWEEN P_BGN_BRANCH AND P_END_BRANCH
+AND M.REM_CD BETWEEN P_BGN_REM_CD AND P_END_REM_CD
+ORDER BY brch_cd,client_cd;
+  EXCEPTION
+  WHEN OTHERS THEN
+    V_ERROR_CODE := -3;
+    V_ERROR_MSG  := SUBSTR('INSERT INTO R_OUTS_BY_BRANCH '||SQLERRM(SQLCODE),1,200);
+    RAISE V_err;
+  END;
+  COMMIT;
+  
+  P_ERROR_CODE :=1;
+  P_ERROR_MSG  :='';
+  P_RAND_VALUE :=V_RANDOM_VALUE;
+EXCEPTION
+WHEN V_ERR THEN
+  ROLLBACK;
+  P_ERROR_CODE :=V_ERROR_CODE;
+  P_ERROR_MSG  :=V_ERROR_MSG;
+WHEN OTHERS THEN
+  ROLLBACK;
+  P_ERROR_CODE:=-1;
+  P_ERROR_MSG :=SUBSTR(SQLERRM,1,200);
+  RAISE;
+END SPR_OUTS_BY_BRANCH;

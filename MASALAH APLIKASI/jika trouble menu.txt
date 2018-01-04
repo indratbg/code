@@ -1,0 +1,19 @@
+jika menu hilang
+
+cari 
+select * from mst_menuaction where action_url like 'core/usergroup/menuconf'
+
+dan
+
+select * from mst_menuaction where action_url like 'core/usergroup/index'
+
+setelah itu ambil menuaction_id dan iNsert ke MST_USERGROUPAKSES
+
+usergroupakses_id diambil dari sequence SEQ_USERGROUPAKSES_ID
+
+setelah itu buka url 
+http://localhost/insistpro/index.php?r=core/usergroup/index
+
+
+
+//password windows 8 bompi 2 : kuya#))(BATOK

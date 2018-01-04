@@ -1,0 +1,262 @@
+create or replace 
+PROCEDURE SP_REKS_MOVEMENT_CREATE(
+					p_doc_dt t_reks_movement.doc_dt%TYPE,
+					p_coy_client_cd t_reks_movement.client_cd%TYPE,
+					p_reks_cd t_reks_movement.reks_cd%TYPE, 
+					p_trx_type t_reks_movement.trx_type%TYPE,
+					p_debit t_reks_movement.debit%TYPE,
+					p_credit t_reks_movement.credit%TYPE, 
+					p_nab_unit t_reks_movement.nab_unit%TYPE,
+					p_approved_user_id  T_TEMP_HEADER.user_id%TYPE,
+					p_status T_TEMP_HEADER.status%TYPE,
+					
+          p_doc_num out  t_reks_movement.doc_num%TYPE,
+          p_error_code out number,
+          p_error_msg			out				VARCHAR2
+)
+IS
+tmpVar NUMBER;
+/******************************************************************************
+   NAME:       SP_REKS_MOVEMENT_CREATE
+   PURPOSE:
+
+   REVISIONS:
+   Ver        Date        Author           Description
+   ---------  ----------  ---------------  ------------------------------------
+   1.0        12/09/2014          1. Created this procedure.
+
+   NOTES:
+******************************************************************************/
+
+
+
+v_cnt NUMBER;
+v_trx_type t_reks_movement.trx_type%type;
+v_doc_num t_reks_movement.doc_num%TYPE;
+v_doc_dt date;
+v_client_cd t_reks_movement.client_cd%TYPE;
+v_reks_cd t_reks_movement.reks_cd%TYPE;
+
+v_debit t_reks_movement.debit%TYPE;
+v_credit t_reks_movement.credit%TYPE;
+v_doc_rem t_reks_movement.doc_rem%TYPE;
+v_doc_stat t_reks_movement.doc_stat%TYPE;
+v_gl_acct_cd t_reks_movement.gl_acct_cd%TYPE;
+v_diff_date date;
+v_db_cr_flg t_reks_movement.db_cr_flg%TYPE;
+v_seqno t_reks_movement.seqno%TYPE;
+v_nab_unit t_reks_movement.nab_unit%TYPE;
+v_nab_date t_reks_nab.nab_date%TYPE;
+v_coy_client_cd t_reks_movement.client_cd%TYPE;
+v_seqno INTEGER;
+v_deb_acct t_reks_movement.gl_acct_cd%TYPE;
+v_cre_acct t_reks_movement.gl_acct_cd%TYPE;
+v_trx_date DATE;
+
+v_client_type mst_secu_acct.CLIENT_TYPE%TYPE;
+v_err EXCEPTION;
+v_error_code							NUMBER;
+v_error_msg							VARCHAR2(200);
+
+BEGIN	
+
+		v_doc_num := TO_CHAR(p_doc_dt,'mmyy')||'REX';
+
+		BEGIN
+		SELECT TO_NUMBER(MAX(SUBSTR(doc_num,8,6))) INTO v_cnt
+		FROM t_reks_movement
+		WHERE SUBSTR(doc_num,1,7) = v_doc_num;
+		EXCEPTION
+		WHEN NO_DATA_FOUND THEN
+		   v_cnt := 0;
+		END;
+
+		IF v_cnt IS NULL THEN
+		   v_cnt := 1;
+		ELSE
+			v_cnt := v_cnt + 1;
+		END IF;
+
+		v_doc_num := v_doc_num||TO_CHAR(v_cnt,'fm000000');
+		
+		IF p_status ='I' THEN
+		-----------INSERT--------------
+		
+		FOR v_seqno IN 1..2 LOOP
+		v_cnt := v_seqno;
+		
+		if p_trx_type = 'SUBS' then
+			if v_seqno =1 then
+			v_gl_acct_cd := '10';
+			else
+			v_gl_acct_cd := '35';
+			end if;
+		
+		else
+			if v_seqno = 1 then
+			v_gl_acct_cd := '35';
+			else
+			v_gl_acct_cd := '10';
+			end if;
+		end if;
+		
+		BEGIN
+					INSERT INTO IPNEXTG.T_REKS_MOVEMENT (
+							   DOC_NUM, DOC_DT, CLIENT_CD,
+							   REKS_CD, TRX_TYPE, DEBIT,
+							   CREDIT, DOC_REM, DOC_STAT,
+							   GL_ACCT_CD, DB_CR_FLG, SEQNO,
+							   NAB_UNIT, CRE_DT, USER_ID,
+							   UPD_DT, UPD_BY, APPROVED_DT,
+							   APPROVED_BY, APPROVED_STS)
+			VALUES (v_doc_num , p_doc_dt, p_coy_client_cd,
+			   p_reks_cd, p_trx_type, p_debit,
+			    p_credit, DECODE(p_trx_type,'SUBS','Subscribe','Redeem'), '2',
+			    v_gl_acct_cd, DECODE(v_cnt,1,'D','C'), v_cnt,
+			    p_nab_unit, SYSDATE,p_approved_user_id,
+			    NULL, NULL, NULL,
+			    NULL,'A' );
+				 EXCEPTION
+            WHEN NO_DATA_FOUND THEN
+              v_error_code := -2;
+							v_error_msg :=  SUBSTR(SQLERRM,1,200);
+							RAISE v_err;
+            WHEN OTHERS THEN
+              v_error_code := -3;
+              v_error_msg := SUBSTR(SQLERRM,1,200);
+              RAISE v_err;
+          END;
+		  
+       END LOOP;
+	   ----------------END INSERT----------------
+	   ELSIF p_status ='U' THEN
+	   ---------------------UPDATE--------------------
+	   FOR v_seqno IN 1..2 LOOP
+		v_cnt := v_seqno;
+		
+		if p_trx_type = 'SUBS' then
+			v_trx_type := 'RSUB';
+			
+				if v_seqno =1 then
+				v_gl_acct_cd := '35';
+				else
+				v_gl_acct_cd := '10';
+				end if;
+		
+		
+		else
+			v_trx_type := 'RRED';
+			if v_seqno = 1 then
+			v_gl_acct_cd := '10';
+			else
+			v_gl_acct_cd := '35';
+			end if;
+		end if;
+		
+		BEGIN
+					INSERT INTO IPNEXTG.T_REKS_MOVEMENT (
+							   DOC_NUM, DOC_DT, CLIENT_CD,
+							   REKS_CD, TRX_TYPE, DEBIT,
+							   CREDIT, DOC_REM, DOC_STAT,
+							   GL_ACCT_CD, DB_CR_FLG, SEQNO,
+							   NAB_UNIT, CRE_DT, USER_ID,
+							   UPD_DT, UPD_BY, APPROVED_DT,
+							   APPROVED_BY, APPROVED_STS)
+			VALUES (v_doc_num , p_doc_dt, p_coy_client_cd,
+			   p_reks_cd, v_trx_type, DECODE(v_trx_type,'RSUB',0,p_debit),
+			    DECODE(v_trx_type,'RRED',0,p_credit), DECODE(p_trx_type,'SUBS','Reversal Subscribe',' Reversal Redeem'),'2',
+			    v_gl_acct_cd, DECODE(v_cnt,1,'D','C'), v_cnt,
+			    p_nab_unit, SYSDATE,p_approved_user_id,
+			    NULL, NULL, NULL,
+			    NULL,'A');
+				 EXCEPTION
+            WHEN NO_DATA_FOUND THEN
+              v_error_code := -4;
+							v_error_msg :=  SUBSTR(SQLERRM,1,200);
+							RAISE v_err;
+            WHEN OTHERS THEN
+              v_error_code := -5;
+              v_error_msg := SUBSTR(SQLERRM,1,200);
+              RAISE v_err;
+          END;
+		  
+       END LOOP;
+	   
+	   --------------------END UPDATE-----------------
+	   ELSE
+	   ------------------CANCEL--------------
+	   
+	    FOR v_seqno IN 1..2 LOOP
+		v_cnt := v_seqno;
+		
+		if p_trx_type = 'SUBS' then
+			v_trx_type := 'RSUB';
+			
+				if v_seqno =1 then
+				v_gl_acct_cd := '35';
+				else
+				v_gl_acct_cd := '10';
+				end if;
+		
+		
+		else
+			v_trx_type := 'RRED';
+			if v_seqno = 1 then
+			v_gl_acct_cd := '10';
+			else
+			v_gl_acct_cd := '35';
+			end if;
+		end if;
+		
+		BEGIN
+					INSERT INTO IPNEXTG.T_REKS_MOVEMENT (
+							   DOC_NUM, DOC_DT, CLIENT_CD,
+							   REKS_CD, TRX_TYPE, DEBIT,
+							   CREDIT, DOC_REM, DOC_STAT,
+							   GL_ACCT_CD, DB_CR_FLG, SEQNO,
+							   NAB_UNIT, CRE_DT, USER_ID,
+							   UPD_DT, UPD_BY, APPROVED_DT,
+							   APPROVED_BY, APPROVED_STS)
+			VALUES (v_doc_num , p_doc_dt, p_coy_client_cd,
+			   p_reks_cd, v_trx_type, DECODE(v_trx_type,'RSUB',0,p_debit),
+			    DECODE(v_trx_type,'RRED',0,p_credit), DECODE(p_trx_type,'SUBS','Reversal Subscribe','Reversal Redeem'),'2',
+			    v_gl_acct_cd, DECODE(v_cnt,1,'D','C'), v_cnt,
+			    p_nab_unit, SYSDATE,p_approved_user_id,
+			    NULL, NULL, NULL,
+			    NULL,'A');
+				 EXCEPTION
+            WHEN NO_DATA_FOUND THEN
+              v_error_code := -6;
+							v_error_msg :=  SUBSTR(SQLERRM,1,200);
+							RAISE v_err;
+            WHEN OTHERS THEN
+              v_error_code := -7;
+              v_error_msg := SUBSTR(SQLERRM,1,200);
+              RAISE v_err;
+          END;
+		  
+       END LOOP;
+	   
+	   
+	   ------------END CANCEL-------------------
+	   
+	   
+	   END IF; 
+	   
+	   
+   p_doc_num := v_doc_num;
+   EXCEPTION
+     WHEN NO_DATA_FOUND THEN
+       NULL;
+       WHEN v_err THEN
+           p_error_code := v_error_code;
+		   p_error_msg :=  v_error_msg;
+	      ROLLBACK;
+
+     WHEN OTHERS THEN
+       -- Consider logging the error and then re-raise
+       v_error_code :=-1;
+        v_error_msg := SUBSTR(SQLERRM,1,200);
+        ROLLBACK;
+       RAISE;
+END SP_REKS_MOVEMENT_CREATE;

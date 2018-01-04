@@ -1,0 +1,18 @@
+CREATE TABLE R_STK_BAL_MAIN_ACCT_001(
+sub_rek VARCHAR2(14),
+STK_CD VARCHAR2(50),
+secu_theo NUMBER(18),
+secu_onh NUMBER(18),
+secu_os_buy NUMBER(18),
+secu_os_sell NUMBER(18),
+curr_theo NUMBER(18),
+curr_onh NUMBER(18),
+pdate_theo NUMBER(18),
+pdate_onh NUMBER(18),
+ksei NUMBER(18),
+c_theo NUMBER(18),
+c_onh NUMBER(16),
+selisih number(18),
+USER_ID VARCHAR2(10),
+GENERATE_DATE DATE,
+RAND_VALUE NUMBER(10));

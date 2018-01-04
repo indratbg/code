@@ -1,0 +1,9 @@
+SELECT c.client_Cd, m.client_name, contr_dt, SUBSTR(contr_num,5,1) bj, gl_acct_cd, sl_Acct_cd, SUM(DECODE(db_cr_flg,'D',1,-1) * curr_val ) amt
+FROM T_CONTRACTS c, T_ACCOUNT_LEDGER t, MST_CLIENT m
+WHERE c.contr_dt = '6oct14'
+AND contr_stat <> 'C'
+AND c.contr_num = t.XN_DOC_NUM
+AND t.gl_acct_cd = '6100' 
+AND c.client_Cd LIKE 'YENN%'
+AND c.client_Cd = m.client_Cd
+GROUP BY c.client_Cd, m.client_name, contr_dt, SUBSTR(contr_num,5,1), gl_acct_cd, sl_Acct_cd

@@ -1,0 +1,27 @@
+SELECT a.TANGGALTimestamp, a.currency, a.InstructionFrom, a.RDN, c.branch_code, c.client_cd, c.client_name,
+	a.BEGINNINGBALANCE, a.TRANSACTIONVALUE, a.CLOSINGBALANCE ,
+ a.BANKREFERENCE, 'N' Jurnal, b.cnt,
+a.tanggalefektif, a.bankid, a.transactiontype,
+DECODE(a.transactiontype, '198','Tax','160','Interest','Setoran') TypeText,
+DECODE(a.transactiontype, '198','NGA','160','NGA','005','NGA','XXX') frombank,
+a.remark, 'N' default_remark
+FROM( SELECT NVL(bank_ref_num,'X') bank_ref_num
+	    FROM T_FUND_MOVEMENT
+		WHERE doc_date BETWEEN TO_DATE(:as_TanggalEfektif,'dd/mm/yyyy') AND TO_DATE(:as_SampaiTgl,'dd/mm/yyyy')
+		AND approved_sts <> 'C') d,
+ T_BANK_MUTATION a, 
+ ( SELECT BANK_ACCT_NUM, MAX(client_cd) AS client_cd, COUNT(1) AS cnt
+	FROM 	MST_CLIENT_FLACCT
+	WHERE acct_stat <> 'C' 
+	GROUP BY BANK_ACCT_NUM) b, MST_CLIENT c
+WHERE a.TanggalEfektif BETWEEN TO_DATE(:as_TanggalEfektif,'dd/mm/yyyy') AND TO_DATE(:as_SampaiTgl,'dd/mm/yyyy')
+AND (a.TYPEMUTASI = 'C' OR a.transactiontype = '198')
+AND a.transactiontype <> '@IP@'
+AND a.InstructionFrom NOT IN (SELECT REPLACE(REPLACE(bank_acct_cd,'-',''),'.','')
+                             FROM MST_BANK_ACCT
+                             WHERE bank_acct_cd <> 'X')
+AND a.rdn = b.BANK_ACCT_NUM
+AND b.client_cd = c.client_cd
+AND a.BANKREFERENCE = d.bank_ref_num(+)
+AND d.bank_ref_num IS NULL
+ORDER BY c.branch_code, c.client_cd, a.TRANSACTIONVALUE DESC, a.TANGGALTimestamp

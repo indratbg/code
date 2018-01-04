@@ -1,0 +1,187 @@
+SELECT * FROM T_BANK_MUTATION ORDER BY tanggalefektif DESC
+
+select * from t_fund_movement order by cre_dt desc
+
+select * from t_fund_ledger order by cre_dt desc
+ select client_cd, client_name, 			
+					decode(trim(rem_cd),'LOT','LO',decode(trim(mst_client.olt),'N',trim(branch_code),'LO')) branch_finan,					
+							 branch_code			
+							from mst_client WHERE CLIENT_CD= 'HAJI001R'
+
+
+
+
+
+
+
+
+select distinct a.TANGGALTimestamp, a.currency, a.InstructionFrom, a.RDN, c.branch_code, c.client_cd, c.client_name,					
+						a.BEGINNINGBALANCE, a.TRANSACTIONVALUE, a.CLOSINGBALANCE ,				
+					 a.BANKREFERENCE, 'N' Jurnal, b.cnt ,					
+					a.tanggalefektif, a.bankid, a.transactiontype,					
+					 decode(a.transactiontype,'NTAX','Tax','NINT','Interest','NKOR','Koreksi','Setoran') TYPETEXT ,					
+					decode(a.transactiontype,'NTAX','BCA','NINT','BCA',decode(a.InstructionFrom,'0000000000','XXX','BCA')) frombank,					
+					a.remark, 'N' default_remark,a.typemutasi						
+					from( select nvl(bank_ref_num,'X') bank_ref_num, BANK_ACCT_NUM, doc_Date, sl_acct_Cd,					
+					                                get_doc_date(1,doc_date) doc_date_min1					
+						    from T_fund_movement a , mst_client_flacct b				
+							where doc_date between to_date('2014-11-26','yyyy-mm-dd') and  to_date('2014-11-26','yyyy-mm-dd')
+							and approved_sts <> 'C'			
+							and a.client_Cd = b.client_Cd) d,			
+					 		T_bank_mutation a, 			
+							( select BANK_ACCT_NUM, max(client_cd) as client_cd, count(1) as cnt			
+								from 	mst_client_flacct	
+								where acct_stat <> 'C' 		
+							group by BANK_ACCT_NUM) b, 			
+							( select client_cd, client_name, 			
+					decode(trim(rem_cd),'LOT','LO',decode(trim(mst_client.olt),'N',trim(branch_code),'LO')) branch_finan,					
+							 branch_code			
+							from mst_client ) c			
+					where a.TanggalEfektif between to_date('2014-11-26','yyyy-mm-dd') and  to_date('2014-11-26','yyyy-mm-dd')
+					and a.InstructionFrom not in (select replace(replace(bank_acct_cd,'-',''),'.','') from MST_BANK_ACCT)					
+					and ( (a.TYPEMUTASI = 'C' and a.transactiontype in ('NTRF','NKOR'))					
+					       or (a.transactiontype in ('NINT','NTAX')))					
+					and b.client_cd = c.client_cd					
+					and a.BANKREFERENCE = d.bank_ref_num(+)					
+					and  d.bank_ref_num is null					
+					and a.rdn = b.BANK_ACCT_NUM					
+					and a.rdn = d.BANK_ACCT_NUM(+)					
+					and d.BANK_ACCT_NUM is null					
+					AND a.TanggalEfektif BETWEEN d.doc_date_min1(+) AND d.doc_date(+)					
+					and d.doc_date is null					
+					and a.transactiontype = d.sl_acct_cd(+)					
+					and d.sl_acct_cd is null 					
+					and ('$branch' = 'All'					
+					     or  instr('$branch',trim(branch_finan)) > 0)					
+					 union
+
+SELECT a.TANGGALTimestamp, a.currency, a.InstructionFrom, a.RDN, c.branch_code, c.client_cd, c.client_name,
+	a.BEGINNINGBALANCE, a.TRANSACTIONVALUE, a.CLOSINGBALANCE ,
+ a.BANKREFERENCE, 'N' Jurnal, b.cnt,
+a.tanggalefektif, a.bankid, a.transactiontype,
+DECODE(a.transactiontype, '198','Tax','160','Interest','Setoran') TypeText,
+DECODE(a.transactiontype, '198','NGA','160','NGA','005','NGA','XXX') frombank,
+	a.remark, 'N' default_remark,a.typemutasi	
+FROM( SELECT NVL(bank_ref_num,'X') bank_ref_num
+	    FROM T_FUND_MOVEMENT
+		WHERE doc_date BETWEEN to_date('2014-11-26','yyyy-mm-dd') and  to_date('2014-11-26','yyyy-mm-dd')
+		AND approved_sts <> 'C') d,
+ T_BANK_MUTATION a, 
+ ( SELECT BANK_ACCT_NUM, MAX(client_cd) AS client_cd, COUNT(1) AS cnt
+	FROM 	MST_CLIENT_FLACCT
+	WHERE acct_stat <> 'C' 
+	GROUP BY BANK_ACCT_NUM) b, MST_CLIENT c
+WHERE a.TanggalEfektif BETWEEN  to_date('2014-11-26','yyyy-mm-dd') and  to_date('2014-11-26','yyyy-mm-dd')
+AND (a.TYPEMUTASI = 'C' OR a.transactiontype = '198')
+AND a.transactiontype <> '@IP@'
+AND a.InstructionFrom NOT IN (SELECT REPLACE(REPLACE(bank_acct_cd,'-',''),'.','')
+                             FROM MST_BANK_ACCT
+                             WHERE bank_acct_cd <> 'X')
+AND a.rdn = b.BANK_ACCT_NUM
+AND b.client_cd = c.client_cd
+AND a.BANKREFERENCE = d.bank_ref_num(+)
+AND d.bank_ref_num IS NULL
+ORDER BY branch_code, client_cd, TRANSACTIONVALUE DESC, TANGGALTimestamp
+
+
+
+
+select distinct a.TANGGALTimestamp, a.currency, a.InstructionFrom, a.RDN, c.branch_code, c.client_cd, c.client_name,					
+						a.BEGINNINGBALANCE, a.TRANSACTIONVALUE, a.CLOSINGBALANCE ,				
+					 a.BANKREFERENCE, 'N' Jurnal, b.cnt ,					
+					a.tanggalefektif, a.bankid, a.transactiontype,					
+					 decode(trim(a.transactiontype),'NTAX','Tax','NINT','Interest','NKOR','Koreksi','198','Tax','160','Interest','Setoran') TYPETEXT ,					
+					decode(a.transactiontype,'NTAX','BCA','NINT','BCA','198','NGA','160','NGA','005','NGA',decode(a.InstructionFrom,'0000000000','XXX','BCA')) frombank,					
+					a.remark, 'N' default_remark,a.typemutasi						
+					from( select nvl(bank_ref_num,'X') bank_ref_num, BANK_ACCT_NUM, doc_Date, sl_acct_Cd,					
+					                                get_doc_date(1,doc_date) doc_date_min1					
+						    from T_fund_movement a , mst_client_flacct b				
+							where doc_date between to_date('2014-11-26','yyyy-mm-dd') and  to_date('2014-11-26','yyyy-mm-dd')
+							and approved_sts <> 'C'			
+							and a.client_Cd = b.client_Cd) d,			
+					 		T_bank_mutation a, 			
+							( select BANK_ACCT_NUM, max(client_cd) as client_cd, count(1) as cnt			
+								from 	mst_client_flacct	
+								where acct_stat <> 'C' 		
+							group by BANK_ACCT_NUM) b, 			
+							( select client_cd, client_name, 			
+					decode(trim(rem_cd),'LOT','LO',decode(trim(mst_client.olt),'N',trim(branch_code),'LO')) branch_finan,					
+							 branch_code			
+							from mst_client ) c			
+					where a.TanggalEfektif between to_date('2014-11-26','yyyy-mm-dd') and  to_date('2014-11-26','yyyy-mm-dd')	
+					and a.InstructionFrom not in (select replace(replace(bank_acct_cd,'-',''),'.','') from MST_BANK_ACCT)					
+					and ( (a.TYPEMUTASI = 'C' and a.transactiontype in ('NTRF','NKOR','005'))					
+					       or (a.transactiontype in ('NINT','NTAX','160','198')  ))					
+					and b.client_cd = c.client_cd					
+					and a.BANKREFERENCE = d.bank_ref_num(+)					
+					and  d.bank_ref_num is null					
+					and a.rdn = b.BANK_ACCT_NUM					
+					and a.rdn = d.BANK_ACCT_NUM(+)					
+					and d.BANK_ACCT_NUM is null					
+					AND a.TanggalEfektif BETWEEN d.doc_date_min1(+) AND d.doc_date(+)					
+					and d.doc_date is null					
+					and a.transactiontype = d.sl_acct_cd(+)					
+					and d.sl_acct_cd is null 					
+        --AND BRANCH_CODE IN ('JK','PR')
+            and ('JK,PR' = 'All'					
+					   or  instr('JK,PR',trim(branch_finan)) > 0)
+					 union
+
+SELECT a.TANGGALTimestamp, a.currency, a.InstructionFrom, a.RDN, c.branch_code, c.client_cd, c.client_name,
+	a.BEGINNINGBALANCE, a.TRANSACTIONVALUE, a.CLOSINGBALANCE ,
+ a.BANKREFERENCE, 'N' Jurnal, b.cnt,
+a.tanggalefektif, a.bankid, a.transactiontype,
+		 decode(trim(a.transactiontype),'NTAX','Tax','NINT','Interest','NKOR','Koreksi','198','Tax','160','Interest','Setoran') TYPETEXT ,					
+					decode(a.transactiontype,'NTAX','BCA','NINT','BCA','198','NGA','160','NGA','005','NGA',decode(a.InstructionFrom,'0000000000','XXX','BCA')) frombank,
+	a.remark, 'N' default_remark,a.typemutasi	
+FROM( SELECT NVL(bank_ref_num,'X') bank_ref_num
+	    FROM T_FUND_MOVEMENT
+		WHERE doc_date BETWEEN to_date('2014-11-26','yyyy-mm-dd') and  to_date('2014-11-26','yyyy-mm-dd')	
+		AND approved_sts <> 'C') d,
+ T_BANK_MUTATION a, 
+ ( SELECT BANK_ACCT_NUM, MAX(client_cd) AS client_cd, COUNT(1) AS cnt
+	FROM 	MST_CLIENT_FLACCT
+	WHERE acct_stat <> 'C' 
+	GROUP BY BANK_ACCT_NUM) b, 
+  	( select client_cd, client_name, 			
+					decode(trim(rem_cd),'LOT','LO',decode(trim(mst_client.olt),'N',trim(branch_code),'LO')) branch_finan,					
+							 branch_code			
+							from mst_client ) c			
+WHERE a.TanggalEfektif BETWEEN  to_date('2014-11-26','yyyy-mm-dd') and  to_date('2014-11-26','yyyy-mm-dd')
+and ( (a.TYPEMUTASI = 'C' and a.transactiontype in ('NTRF','NKOR','005') )					
+					       or (a.transactiontype in ('NINT','NTAX','160','198') ))
+AND a.transactiontype <> '@IP@'
+AND a.InstructionFrom NOT IN (SELECT REPLACE(REPLACE(bank_acct_cd,'-',''),'.','')
+                             FROM MST_BANK_ACCT
+                             WHERE bank_acct_cd <> 'X')
+AND a.rdn = b.BANK_ACCT_NUM
+AND b.client_cd = c.client_cd
+AND a.BANKREFERENCE = d.bank_ref_num(+)
+
+--AND BRANCH_CODE IN ('JK','PR')
+-- and ('JK,PR' = 'All'					
+--					     or  instr('JK,PR',trim(branch_finan)) > 0)
+ORDER BY branch_code, client_cd, TRANSACTIONVALUE DESC, TANGGALTimestamp
+
+
+
+
+
+
+  CREATE OR REPLACE FORCE VIEW "IPNEXTG"."V_GL_JOURNAL_INDEX" ("JVCH_DATE", "REMARKS", "FOLDER_CD", "JVCH_NUM") AS 
+  select  H.jvch_date, H.remarks, H.folder_Cd, H.jvch_num
+from T_JVCHH h, T_account_ledger d
+where H.approved_Sts ='A'
+and H.jvch_type = 'GL'
+and substr(H.jvch_num,8,3) not in ( 'DPR','MFE')
+and H.jvch_num = d.xn_doc_num
+ 
+
+and d.budget_Cd <> 'INTREPO';
+
+SELECT *  FROM  T_JVCHH where jvch_num='1114GLA0000017'
+
+
+select gl_a,sl_a from mst_gl_account
+
+

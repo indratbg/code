@@ -1,0 +1,11 @@
+Saputra: ok
+sadityastk: sy udh kasih assignm , di mantis, menu: update stock on hand .. ini JANGAN di TES di LIVe, krn update T STKHAND
+Indra Saputra: iya bu
+sadityastk: menu itu, jurnal di stk movm nya .. 4 baris
+sadityastk: kecuali klo client cd= coy client cd (misal LAUT001R) ato clie type 1 = H
+Indra Saputra: iya bu
+sadityastk: klo mo liat contohny . cari di t stk movm yg S_D_TYPE = V
+Indra Saputra: ok
+sadityastk: kaitanny dg T CONTRATS di field REF dOC NUM= contr_num
+sadityastk: klo yg pake JO / BO di ref doc num, ga ush diliat ..itu jurnal bond trx
+Indra Saputra: ok

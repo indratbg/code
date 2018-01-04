@@ -1,0 +1,210 @@
+create or replace 
+PROCEDURE SPR_CLIENT_PERFORMANCE(
+    P_BGN_DATE      DATE,
+    P_END_DATE      DATE,
+    P_BGN_BRANCH    VARCHAR2,
+    P_END_BRANCH    VARCHAR2,
+    P_BGN_CTR_TYPE  VARCHAR2,
+    P_END_CTR_TYPE  VARCHAR2,
+    P_BGN_CLIENT    VARCHAR2,
+    P_END_CLIENT    VARCHAR2,
+    P_REPORT_MODE   VARCHAR2,
+    P_CORP          VARCHAR2,
+    P_USER_ID       VARCHAR2,
+    P_GENERATE_DATE DATE,
+    P_RANDOM_VALUE OUT NUMBER,
+    P_ERROR_CD OUT NUMBER,
+    P_ERROR_MSG OUT VARCHAR2 )
+AS
+  V_ERR          EXCEPTION;
+  V_ERROR_CD     NUMBER(5);
+  V_ERROR_MSG    VARCHAR2(200);
+  V_RANDOM_VALUE NUMBER(10);
+BEGIN
+
+  V_RANDOM_VALUE := ABS(DBMS_RANDOM.RANDOM);
+  
+  BEGIN
+    SP_RPT_REMOVE_RAND('R_CLIENT_PERFORMANCE',V_RANDOM_VALUE,V_ERROR_MSG,V_ERROR_CD);
+  EXCEPTION
+  WHEN OTHERS THEN
+    V_ERROR_CD  := -10;
+    V_ERROR_MSG := SUBSTR('SP_RPT_REMOVE_RAND '||V_ERROR_MSG||SQLERRM(SQLCODE),1,200);
+    RAISE V_err;
+  END;
+  
+  IF P_REPORT_MODE='DETAIL' THEN
+    BEGIN
+      INSERT
+      INTO R_CLIENT_PERFORMANCE
+        (
+          BRCH_CD ,
+          BRCH_NAME ,
+          CLIENT_CD ,
+          CLIENT_NAME ,
+          CONTRACT_TYPE ,
+          TRANSACTION_TYPE ,
+          VAL ,
+          BROK ,
+          COMMISSION ,
+          AMT_FOR_CURR ,
+          FROM_DATE ,
+          TO_DATE ,
+          USER_ID ,
+          RAND_VALUE ,
+          GENERATE_DATE ,
+          RPT_MODE
+        )
+      SELECT T_CONTRACT_detail.BRCH_CD     AS BRCH_CD,
+        MST_BRANCH.BRCH_NAME               AS BRCH_NAME,
+        T_CONTRACT_DETAIL.CLIENT_CD        AS CLIENT_CD,
+        MST_CLIENT.CLIENT_NAME             AS CLIENT_NAME,
+        T_CONTRACT_DETAIL.CONTRACT_TYPE    AS CONTRACT_TYPE,
+        T_CONTRACT_DETAIL.TRANSACTION_TYPE AS TRANSACTION_TYPE,
+        T_CONTRACT_DETAIL.VAL              AS VAL,
+        T_CONTRACT_DETAIL.BROK             AS BROK,
+        T_CONTRACT_DETAIL.COMMISSION       AS COMMISSION,
+        T_CONTRACT_DETAIL.AMT_FOR_CURR     AS AMT_FOR_CURR ,
+        P_BGN_DATE,
+        P_END_DATE,
+        P_USER_ID,
+        V_RANDOM_VALUE,
+        P_GENERATE_DATE,
+        P_REPORT_MODE
+      FROM
+        (SELECT BRCH_CD,
+          CLIENT_CD,
+          CONTRACT_TYPE,
+          TRANSACTION_TYPE,
+          SUM(VAL) VAL,
+          SUM(BROK) BROK,
+          SUM(COMMISSION) COMMISSION,
+          SUM(AMT_FOR_CURR) AMT_FOR_CURR
+        FROM
+          (SELECT TRIM(T_CONTRACTS.BRCH_CD)     AS BRCH_CD,
+            TRIM(T_CONTRACTS.CLIENT_CD)         AS CLIENT_CD,
+            SUBSTR(T_CONTRACTS.CONTR_NUM, 6, 1) AS CONTRACT_TYPE,
+            SUBSTR(T_CONTRACTS.CONTR_NUM, 5, 1) AS TRANSACTION_TYPE,
+            (T_CONTRACTS.VAL)                   AS VAL,
+            (T_CONTRACTS.BROK)                  AS BROK,
+            (T_CONTRACTS.COMMISSION)            AS COMMISSION,
+            (T_CONTRACTS.AMT_FOR_CURR)          AS AMT_FOR_CURR
+          FROM T_CONTRACTS
+          WHERE T_CONTRACTS.CONTR_STAT                  <> 'C'
+          AND NOT ((SUBSTR(T_CONTRACTS.CONTR_NUM, 5, 1) <> SUBSTR(T_CONTRACTS.CONTR_NUM, 7, 1))
+          AND (SUBSTR(T_CONTRACTS.CONTR_NUM, 6, 1)       = 'I'))
+          AND T_CONTRACTS.CONTR_DT                      >= P_BGN_DATE
+          AND T_CONTRACTS.CONTR_DT                       < P_END_DATE + 1
+          AND (TRIM(T_CONTRACTS.BRCH_CD) BETWEEN P_BGN_BRANCH AND P_END_BRANCH)
+          AND (SUBSTR(T_CONTRACTS.CONTR_NUM, 6, 1) BETWEEN P_BGN_CTR_TYPE AND P_END_CTR_TYPE)
+          AND ((T_CONTRACTS.CLIENT_CD) BETWEEN P_BGN_CLIENT AND P_END_CLIENT)
+          )
+        GROUP BY BRCH_CD,
+          CLIENT_CD,
+          CONTRACT_TYPE,
+          TRANSACTION_TYPE
+        ) T_CONTRACT_DETAIL,
+        MST_BRANCH,
+        MST_CLIENT
+      WHERE T_CONTRACT_DETAIL.BRCH_CD   = TRIM(MST_BRANCH.BRCH_CD)
+      AND (T_CONTRACT_DETAIL.CLIENT_CD) = mst_CLIENT.CLIENT_CD
+       AND ((MST_CLIENT.CLIENT_TYPE_1 = 'C'
+      AND P_CORP                     = 'CORP')
+     OR(MST_CLIENT.OLT              = 'Y'
+      AND P_CORP                     ='LOT')
+      OR P_CORP                      = 'ALL');
+    EXCEPTION
+    WHEN OTHERS THEN
+      V_ERROR_CD  := -40;
+      V_ERROR_MSG := SUBSTR('INSERT INTO R_CLIENT_PERFORMANCE '||SQLERRM(SQLCODE),1,200);
+      RAISE V_err;
+    END;
+  END IF;
+  
+  IF P_REPORT_MODE='SUMMARY_TRX' OR P_REPORT_MODE='SUMMARY_CL' THEN
+    BEGIN
+      INSERT
+      INTO R_CLIENT_PERFORMANCE
+        (
+          BRCH_CD ,
+          BRCH_NAME ,
+          CLIENT_CD ,
+          CLIENT_NAME ,
+          REM_CD ,
+          CONTRACT_TYPE ,
+          TRANSACTION_TYPE ,
+          VAL ,
+          BROK ,
+          COMMISSION ,
+          AMT_FOR_CURR ,
+          FROM_DATE ,
+          TO_DATE ,
+          USER_ID ,
+          RAND_VALUE ,
+          GENERATE_DATE ,
+          RPT_MODE
+        )
+      SELECT TRIM(T_CONTRACTS.BRCH_CD) AS BRCH_CD,
+        NULL BRANCH_NAME,
+        TRIM(T_CONTRACTS.CLIENT_CD)           AS CLIENT_CD,
+        INITCAP(TRIM(MST_CLIENT.CLIENT_NAME)) AS CLIENT_NAME,
+        TRIM(T_CONTRACTS.REM_CD)              AS REM_CD,
+        NULL CONTRACT_TYPE,
+        NULL TRANSACTION_TYPE,
+        SUM(T_CONTRACTS.VAL)          AS VAL,
+        SUM(T_CONTRACTS.BROK)         AS BROK,
+        SUM(T_CONTRACTS.COMMISSION)   AS COMMISSION,
+        SUM(T_CONTRACTS.AMT_FOR_CURR) AS AMT_FOR_CURR,
+        P_BGN_DATE,
+        P_END_DATE,
+        P_USER_ID,
+        V_RANDOM_VALUE,
+        P_GENERATE_DATE,
+        P_REPORT_MODE
+      FROM T_CONTRACTS,
+        MST_CLIENT
+      WHERE T_CONTRACTS.CONTR_STAT                  <> 'C'
+      AND NOT ((SUBSTR(T_CONTRACTS.CONTR_NUM, 5, 1) <> SUBSTR(T_CONTRACTS.CONTR_NUM, 7, 1))
+      AND (SUBSTR(T_CONTRACTS.CONTR_NUM, 6, 1)       = 'I'))
+      AND T_CONTRACTS.CONTR_DT                      >= P_BGN_DATE
+      AND T_CONTRACTS.CONTR_DT                       < P_END_DATE + 1
+      AND (TRIM(T_CONTRACTS.BRCH_CD) BETWEEN P_BGN_BRANCH AND P_END_BRANCH)
+      AND (T_CONTRACTS.CLIENT_CD BETWEEN P_BGN_CLIENT AND P_END_CLIENT)
+      AND (SUBSTR(T_CONTRACTS.CONTR_NUM, 6, 1) BETWEEN P_BGN_CTR_TYPE AND P_END_CTR_TYPE)
+      AND MST_CLIENT.CLIENT_CD = T_CONTRACTS.CLIENT_CD
+        --  AND  ((NVL(trim(SUBSTR(MST_CLIENT.OLD_IC_NUM,3,4)),'XXXX') <> '-LIM' AND :s_lim = 'WO') OR   --                 ini tolg dirubah
+        --       (NVL(trim(SUBSTR(MST_CLIENT.OLD_IC_NUM,3,4)),'XXXX') = '-LIM' AND :s_lim = 'ONLY') OR --                  ini tolg dirubah
+        --       ( :s_lim = 'WITH'))             --      ini tolg dirubah
+      AND ((MST_CLIENT.CLIENT_TYPE_1 = 'C'
+      AND P_CORP                     = 'CORP')
+      OR(MST_CLIENT.OLT              = 'Y'
+      AND P_CORP                     ='LOT')
+      OR P_CORP                      = 'ALL')
+      GROUP BY T_CONTRACTS.BRCH_CD,
+        T_CONTRACTS.CLIENT_CD,
+        MST_CLIENT.CLIENT_NAME,
+        T_CONTRACTS.REM_CD
+      ORDER BY TRIM(T_CONTRACTS.BRCH_CD) ASC,
+        TRIM(T_CONTRACTS.CLIENT_CD) ASC ;
+    EXCEPTION
+    WHEN OTHERS THEN
+      V_ERROR_CD  := -50;
+      V_ERROR_MSG := SUBSTR('INSERT INTO R_CLIENT_PERFORMANCE '||SQLERRM(SQLCODE),1,200);
+      RAISE V_err;
+    END;
+  END IF;
+  
+  P_RANDOM_VALUE := v_random_value;
+  P_ERROR_CD     := 1 ;
+  P_ERROR_MSG    := '';
+  
+EXCEPTION
+WHEN V_ERR THEN
+  ROLLBACK;
+  P_ERROR_MSG := V_ERROR_MSG;
+  P_ERROR_CD  := V_ERROR_CD;
+WHEN OTHERS THEN
+  P_ERROR_CD  := -1 ;
+  P_ERROR_MSG := SUBSTR(SQLERRM(SQLCODE),1,200);
+  RAISE;
+END SPR_CLIENT_PERFORMANCE;

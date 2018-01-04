@@ -1,0 +1,227 @@
+<?php
+
+class ImportController extends AAdminController
+{
+	
+	public $layout='//layouts/admin_column2';
+	
+	public function actionAjxReconcileKsei()
+	{
+		if(Yii::app()->request->isPostRequest)
+		{
+			$model = new RptImpRekDanaWKsei('IMP_RECON_RDI_KSEI','R_RECON_RDI_KSEI','Reconcile_ksei.rptdesign');
+			if($model->validate() && $model->executeReportGenSp() > 0 )
+			{
+				$url 	  = $model->showReport();
+				echo $url;
+			}
+			else
+			{
+				throw new CHttpException(400,$model->getErrors());
+			}
+		}
+		else
+			throw new CHttpException(400,'Invalid request. Please do not repeat this request again.');
+	}
+	
+	public function actionAjxReconcileBank()
+	{
+		if(Yii::app()->request->isPostRequest)
+		{
+			$model = new RptImpRekDanaWBank('IMP_RECON_RDI_BANK','R_RECON_RDI_BANK','Reconcile_bank.rptdesign');
+			if($model->validate() && $model->executeReportGenSp() > 0 )
+			{
+				$url = $model->showReport();
+				echo $url;
+			}
+			else
+			{
+				throw new CHttpException(400,$model->getErrors());
+			}
+		}
+		else
+			throw new CHttpException(400,'Invalid request. Please do not repeat this request again.');
+		
+		/*	
+		if(Yii::app()->request->isPostRequest)
+		{
+			$modelToken = new Token;
+			$user_id = Yii::app()->user->id;
+			$module = "Import_Reconcile_Bank";
+			$token_cd = $modelToken->insertToken($user_id,$module);
+			$url = Constanta::URL."Reconcile_bank.rptdesign&ACC_TOKEN=$token_cd&ACC_USER_ID=$user_id";
+			echo $url;
+		}
+		else
+		throw new CHttpException(400,'Invalid request. Please do not repeat this request again.');*/
+	}
+	
+	public function actionIndex()
+	{			
+		$model = new Trekdanaksei();
+		//$model->unsetAttributes();
+		$cif = new Cif('search');
+		$cif->unsetAttributes();
+		$import_type;
+		$filename = '';
+		
+		if(isset($_POST['Trekdanaksei']))
+		{
+			$model->attributes = $_POST['Trekdanaksei'];
+			
+			$import_type = $model->import_type;
+			
+			//buat ambil file yang di upload tanpa $_FILES
+			$model->file_upload = CUploadedFile::getInstance($model,'file_upload');
+			$path = FileUpload::getFilePath(FileUpload::IMPORT_REK_DANA,$model->file_upload);
+			$model->file_upload->saveAs($path);
+			$filename = $model->file_upload;
+			
+			if($import_type== AConstant::IMPORT_TYPE_PERTAMA)
+			{
+				//lakukan backup
+				$model->executeBackup();
+				
+				$file = fopen($path, "r");
+				
+				$x = 0;
+				$success = TRUE;
+				
+				$connection  = Yii::app()->db;
+				//$transaction = $connection->beginTransaction();	
+				
+				$menuName = 'IMPORT REKENING DANA';
+				$model->update_date = Yii::app()->datetime->getDateTimeNow();
+				if($model->validate() && $model->executeSpHeader(AConstant::INBOX_STAT_INS,$menuName) > 0)$success = true;
+				while(!feof($file))
+				{
+					$buffer = fgetcsv($file,0,'|');
+					
+					/*if(count($buffer) < 12)
+					{
+						if($buffer[0])Yii::app()->user->setFlash('error', 'Delimiter not supported');
+						break;
+					}
+					*/
+					if(strtoupper($buffer[5]) != 'SIDNUMBER' && strtoupper($buffer[6]) != 'ACCOUNTNUMBER' && strtoupper($buffer[4]) != 'INVESTORNAME' && strtoupper($buffer[7]) != 'BANKACCOUNTNUMBER' && strtoupper($buffer[8]) != 'BANKCODE' )
+					{  $model->update_date = Yii::app()->datetime->getDateTimeNow();
+						//echo "<script>alert('test')</script>";
+						//var_dump($model->executeSpKsei(AConstant::INBOX_STAT_INS,$buffer[7],$buffer[8],$buffer[5],$buffer[6],$buffer[4],1));
+						//die();
+						
+						if($success && $model->executeSpKsei(AConstant::INBOX_STAT_INS,$buffer[7],$buffer[8],$buffer[5],$buffer[6],$buffer[4],1) > 0)
+						{
+							$x = 1;
+	
+						}
+						else {
+							$temp = $buffer[7];
+							if($model->error_code < 0)echo "<script>alert('$temp doesn\'t exist in T_REK_DANA_KSEI')</script>";
+							$success = false;
+							break;
+						}
+					}
+				}
+				if($success && $x == 1)
+				{
+					//$transaction->commit();
+					Yii::app()->user->setFlash('success', 'Successfully saved');
+				}
+				else {
+				//	$transaction->rollback();
+				}
+				
+				
+				
+				
+				
+				
+				
+				
+			
+			
+			
+			
+			
+			
+			
+				
+				/*			
+				$query = "SELECT DFLG1  
+							FROM mst_sys_param  
+							WHERE  param_id = 'IMPORT_CLIENT_FLACCT' AND param_cd1 = 'UPDATE'
+							AND DSTR1 = 'MST_CLIENT_FLACCT'";
+				$res   = DAO::queryRowSql($query);
+				
+				if($res['dflg1']=='Y')
+				{
+					$model->executeInsert();
+				}
+			
+			
+			*/
+			
+			
+			
+			
+			
+			
+			
+			
+			
+			
+}
+
+
+			//insert data ke Trekdanaksei
+			$lines = file($path);
+			foreach ($lines as $line_num => $line) 
+			{
+				if($line_num!=0)
+				{
+					$pieces = explode('|',$line);
+					
+					$model->name = $pieces[4];
+					$model->sid = $pieces[5];
+					$model->subrek = $pieces[6];
+					$model->rek_dana = $pieces[7];
+					$model->bank_cd = $pieces[8];
+					$model->create_dt = new CDbExpression("TO_DATE('".date('Y-m-d H:i:s')."','YYYY-MM-DD HH24:MI:SS')");
+					$activity = trim($pieces[10]);
+					
+					if($activity!=='C')
+					{
+						if($model->save(FALSE))
+						{
+							$model = new Trekdanaksei();
+							//$model->unsetAttributes();
+						}//end if model save
+					}//pieces != C
+				}//end if line!=0
+			}//end foreach
+			
+			//setelah di upload dan dibaca, delete file nya
+			//unlink(FileUpload::getFilePath( FileUpload::IMPORT_REK_DANA,$filename));
+			
+			Yii::app()->user->setFlash('success', 'Successfully upload '.$filename);
+		}//end if isset
+		if(empty($model->import_type)) 
+		{
+			//supaya ada nilai default di checkbox nya
+			$model->import_type = AConstant::IMPORT_TYPE_PERTAMA;
+		}//end else
+		
+		$this->render('index',array(
+			'model'=>$model,
+			'cif'=>$cif
+		));
+	}
+
+	public function loadModel($eff_dt,$stk_type,$mrkt_type,$value_from,$value_to)
+	{
+		$model=Levy::model()->findByPk(array('eff_dt'=>$eff_dt,'stk_type'=>$stk_type,'mrkt_type'=>$mrkt_type,'value_from'=>$value_from,'value_to'=>$value_to));
+		if($model===null)
+			throw new CHttpException(404,'The requested page does not exist.');
+		return $model;
+	}
+}

@@ -1,0 +1,143 @@
+Mencari parameter prosedur
+==========================
+SELECT  'P_'||COLUMN_NAME||CHR(9)||CHR(9)||TABLE_NAME||'.'||column_name||'%TYPE,'  AS TXT
+FROM ALL_tAB_COLS
+WHERE TABLE_NAME = :s_table_name
+ORDER BY COLUMN_ID
+
+//Bind value pada aplikasi (model)
+SELECT  '$command->bindValue(":P_'||COLUMN_NAME||'",$this->'||LOWER(COLUMN_NAME)||',PDO::PARAM_STR);'  AS TXT
+FROM ALL_tAB_COLS
+WHERE TABLE_NAME = :s_table_name
+ORDER BY COLUMN_ID
+
+
+PAKE FIELD NAME
+===============
+SELECT txt
+FROM(
+SELECT 1 seqno, column_id,   'SELECT  '''||COLUMN_NAME||'''  AS field_name, p_'||COLUMN_NAME||' AS field_value, DECODE(trim(v_rec.'||COLUMN_NAME||
+                       '), trim(p_'||COLUMN_NAME||'),''N'',''Y'') upd_flg FROM dual' txt
+FROM ALL_tAB_COLS
+WHERE TABLE_NAME = :s_table_name
+AND data_type <> 'DATE'
+AND data_type <> 'NUMBER'
+UNION
+SELECT 1 seqno, column_id,   'SELECT  '''||COLUMN_NAME||'''  AS field_name, TO_CHAR(p_'||COLUMN_NAME||
+                  ',''yyyy/mm/dd hh24:mi:ss'')  AS field_value, DECODE(v_rec.'||COLUMN_NAME||', p_'||COLUMN_NAME||',''N'',''Y'') upd_flg FROM dual' txt
+FROM ALL_tAB_COLS
+WHERE TABLE_NAME =  :s_table_name
+AND data_type = 'DATE'
+UNION
+SELECT 1 seqno, column_id,   'SELECT  '''||COLUMN_NAME||'''  AS field_name, TO_CHAR(p_'||COLUMN_NAME||
+                 ')  AS field_value, DECODE(v_rec.'||COLUMN_NAME||', p_'||COLUMN_NAME||',''N'',''Y'') upd_flg FROM dual' txt
+FROM ALL_tAB_COLS
+WHERE TABLE_NAME =  :s_table_name
+AND data_type = 'NUMBER'
+UNION
+SELECT 2, column_id,   'UNION' txt
+FROM ALL_tAB_COLS
+WHERE TABLE_NAME = :s_table_name
+) ORDER BY  column_id,seqno
+
+
+
+
+PAKE UPD FLG
+============
+SELECT txt
+FROM(
+SELECT 1 seqno, column_id,   'SELECT  '||column_id||'  AS column_id, p_'||COLUMN_NAME||' AS field_value, DECODE(trim(v_rec.'||COLUMN_NAME||
+                       '), trim(p_'||COLUMN_NAME||'),''N'',''Y'') upd_flg FROM dual' txt
+FROM ALL_tAB_COLS
+WHERE TABLE_NAME = :s_table_name
+AND data_type <> 'DATE'
+AND data_type <> 'NUMBER'
+UNION
+SELECT 1 seqno, column_id,   'SELECT  '||column_id||'  AS column_id, TO_CHAR(p_'||COLUMN_NAME||
+                  ',''yyyy/mm/dd hh24:mi:ss'')  AS field_value, DECODE(v_rec.'||COLUMN_NAME||', p_'||COLUMN_NAME||',''N'',''Y'') upd_flg FROM dual' txt
+FROM ALL_tAB_COLS
+WHERE TABLE_NAME =  :s_table_name
+AND data_type = 'DATE'
+UNION
+SELECT 1 seqno, column_id,   'SELECT  '||column_id||'  AS column_id, TO_CHAR(p_'||COLUMN_NAME||
+                 ')  AS field_value, DECODE(v_rec.'||COLUMN_NAME||', p_'||COLUMN_NAME||',''N'',''Y'') upd_flg FROM dual' txt
+FROM ALL_tAB_COLS
+WHERE TABLE_NAME =  :s_table_name
+AND data_type = 'NUMBER'
+UNION
+SELECT 2, column_id,   'UNION' txt
+FROM ALL_tAB_COLS
+WHERE TABLE_NAME = :s_table_name
+) ORDER BY  column_id,seqno
+
+
+
+== TIDAK PAKE WHERE
+SELECT txt
+FROM(
+SELECT 1 seqno, column_id,   'SELECT  '||column_id||'  AS column_id, p_'||COLUMN_NAME||' AS field_value FROM dual' txt
+FROM ALL_tAB_COLS
+WHERE TABLE_NAME = :s_table_name
+AND data_type <> 'DATE'
+AND data_type <> 'NUMBER'
+UNION
+SELECT 1 seqno, column_id,   'SELECT  '||column_id||'  AS column_id, TO_CHAR(p_'||COLUMN_NAME||',''yyyy/mm/dd hh24:mi:ss'')  AS field_value FROM dual' txt
+FROM ALL_tAB_COLS
+WHERE TABLE_NAME =  :s_table_name
+AND data_type = 'DATE'
+UNION
+SELECT 1 seqno, column_id,   'SELECT  '||column_id||'  AS column_id, TO_CHAR(p_'||COLUMN_NAME||')  AS field_value FROM dual' txt
+FROM ALL_tAB_COLS
+WHERE TABLE_NAME =  :s_table_name
+AND data_type = 'NUMBER'
+UNION
+SELECT 2, column_id,   'UNION' txt
+FROM ALL_tAB_COLS
+WHERE TABLE_NAME = :s_table_name
+) ORDER BY  column_id,seqno
+
+
+
+
+
+== pake WHERE
+SELECT txt
+FROM(
+SELECT 1 seqno, column_id,   'SELECT  '||column_id||'  AS column_id, p_'||COLUMN_NAME||' AS field_value FROM dual' txt
+FROM ALL_tAB_COLS
+WHERE TABLE_NAME = :s_table_name
+AND data_type <> 'DATE'
+AND data_type <> 'NUMBER'
+UNION
+SELECT 1 seqno, column_id,   'SELECT  '||column_id||'  AS column_id, TO_CHAR(p_'||COLUMN_NAME||',''yyyy/mm/dd hh24:mi:ss'')  AS field_value FROM dual' txt
+FROM ALL_tAB_COLS
+WHERE TABLE_NAME =  :s_table_name
+AND data_type = 'DATE'
+UNION
+SELECT 1 seqno, column_id,   'SELECT  '||column_id||'  AS column_id, TO_CHAR(p_'||COLUMN_NAME||')  AS field_value FROM dual' txt
+FROM ALL_tAB_COLS
+WHERE TABLE_NAME =  :s_table_name
+AND data_type = 'NUMBER'
+UNION
+SELECT 2, column_id,'WHERE nvl(p_'||COLUMN_NAME||',va) <> nvl(v_rec.'||COLUMN_NAME||',va)'
+FROM ALL_tAB_COLS
+WHERE TABLE_NAME = :s_table_name
+AND data_type <> 'DATE'
+AND data_type <> 'NUMBER'
+UNION
+SELECT 2, column_id,'WHERE nvl(p_'||COLUMN_NAME||',sysdate) <> nvl(v_rec.'||COLUMN_NAME||',sysdate)'
+FROM ALL_tAB_COLS
+WHERE TABLE_NAME = :s_table_name
+AND data_type = 'DATE'
+UNION
+SELECT 2, column_id,'WHERE nvl(p_'||COLUMN_NAME||',1E-20) <> nvl(v_rec.'||COLUMN_NAME||',1E-20)'
+FROM ALL_tAB_COLS
+WHERE TABLE_NAME = :s_table_name
+AND data_type = 'NUMBER'
+UNION
+SELECT 3, column_id,   'UNION' txt
+FROM ALL_tAB_COLS
+WHERE TABLE_NAME = :s_table_name
+) ORDER BY  column_id,seqno
+

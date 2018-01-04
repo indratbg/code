@@ -1,0 +1,143 @@
+<?php
+$this->breadcrumbs=array(
+	'Trade Confirmation Inbox'=>array('index'),
+	$model->update_seq,
+);
+
+$this->menu=array(
+	array('label'=>'Trade Confirmation Inbox', 'itemOptions'=>array('class'=>'nav-header')),
+	array('label'=>'Unprocessed','icon'=>'list','url'=>array('index')),
+	array('label'=>'Processed','icon'=>'list','url'=>array('indexProcessed')),
+);
+?>
+
+<h1>View Trade Confirmation Inbox #<?php echo $model->update_seq; ?></h1>
+
+<?php AHelper::showFlash($this) ?> <!-- show flash -->
+<!--
+<?php // if ($modeltc[0]){?>
+<h4>Data Trade Confirmation</h4>
+<table id='table-data' class='table table-bordered table-condensed'>
+	<thead>
+		<tr>
+			<th>Transaction Date</th>
+			<th>Client Code</th>
+			<th>Client Name</th>
+			<th colspan="2">Trade Confirmation</th>
+		</tr>
+	</thead>
+	<tbody>
+		<?php foreach($modeltc as $row){?>
+			<tr>
+				<td><?php echo DateTime::createFromFormat('Y-m-d H:i:s',$row->tc_date)->format('d M Y');?></td>
+				<td><?php echo $row->client_cd;?></td>
+				<td><?php echo $row->client_name;?></td>
+				<td>
+					<a onclick='javascript:window.open("<?php echo Yii::app()->request->baseUrl."?r=inbox/ttcdoc/previewtceng&tc_date=".$row->tc_date."&tc_id=".$row->tc_id."&client_cd=".$row->client_cd."&tc_rev=".$row->tc_rev;?>",
+						"tradeconf","status=1,width=800,height=500,scrollbars=1,menubar=yes,titlebar=yes,toolbar=yes"); return false;' href="<?php echo Yii::app()->request->baseUrl.'?r=inbox/ttcdoc/previewtceng';?>">
+						English
+					</a>
+				</td>
+				<td>
+					<a onclick='javascript:window.open("<?php echo Yii::app()->request->baseUrl."?r=inbox/ttcdoc/previewtcind&tc_date=".$row->tc_date."&tc_id=".$row->tc_id."&client_cd=".$row->client_cd."&tc_rev=".$row->tc_rev;?>",
+						"tradeconf","status=1,width=800,height=500,scrollbars=1,menubar=yes,titlebar=yes,toolbar=yes"); return false;' href="<?php echo Yii::app()->request->baseUrl.'?r=inbox/ttcdoc/previewtceng';?>">
+						Indonesian
+					</a>
+				</td>
+			</tr>
+		<?php }?>
+	</tbody>
+</table>
+<?php //}?>
+
+-->
+<?php $this->widget('bootstrap.widgets.TbGridView',array(
+	'id'=>'Gljournalledger-grid',
+    'type'=>'striped bordered condensed',
+	'dataProvider'=>$modeltc->search(),
+	'filter'=>$modeltc,
+    'filterPosition'=>'',
+	'columns'=>array(
+	'client_cd'
+	
+		
+		/*array(
+			'class'=>'bootstrap.widgets.TbButtonColumn',
+			'updateButtonUrl'=>'Yii::app()->createUrl("glaccounting/Gljournalledger/update",array("id"=>$data->jvch_num))',
+			'viewButtonUrl'=>'Yii::app()->createUrl("glaccounting/Gljournalledger/view",array("id"=>$data->jvch_num))',
+			'buttons'=>array(
+		        'delete'=>array(
+		        	'url' => 'Yii::app()->createUrl("/glaccounting/Gljournalledger/AjxPopDelete", array("id"=>$data->jvch_num))',			// AH : change
+		        	'click'=>'js:function(e){
+		            	e.preventDefault();
+						showPopupModal("Cancel Reason",this.href);
+		            }'
+		         ),
+        	 )
+		),*/
+	),
+)); ?>
+<h4>Approval Attributes</h4>
+<div class="row-fluid">
+	<div class="span6">
+		<?php $this->widget('bootstrap.widgets.TbDetailView',array(
+			'data'=>$model,
+			'attributes'=>array(
+				array('name'=>'status','value'=>AConstant::$inbox_stat[$model->status]),
+				array('name'=>'update_date','type'=>'datetime'),
+				'user_id',
+				'ip_address',
+				array('name'=>'cancel_reason','type'=>'raw','value'=>nl2br($model->cancel_reason)),
+			),
+		)); ?>
+	</div>
+	<div class="span6">
+		<?php $this->widget('bootstrap.widgets.TbDetailView',array(
+			'data'=>$model,
+			'attributes'=>array(
+				array('name'=>'approved_status','value'=>AConstant::$inbox_app_stat[$model->approved_status]),
+				array('name'=>'approved_date','type'=>'datetime'),
+				'approved_user_id',
+				array('name'=>'reject_reason','type'=>'raw','value'=>nl2br($model->reject_reason)),
+			),
+		)); ?>
+	</div>
+</div>
+
+<?php if($model->approved_status == AConstant::INBOX_APP_STAT_ENTRY): ?>	
+	<br/>
+	<div style="text-align:right;">
+		<?php $this->widget('bootstrap.widgets.TbButton', array(
+			'type'=>'secondary',
+			'label'=>'Preview All English TC',
+			'htmlOptions' => array(
+    			'onclick' => 'javascript:window.open("'.Yii::app()->request->baseUrl.'?r=inbox/ttcdoc/previewalltceng&id='.$model->primaryKey.'",
+    			"tradeconf","status=1,width=800,height=500,scrollbars=1,menubar=yes,titlebar=yes,toolbar=yes"); return false;')
+		)); ?>
+		<?php $this->widget('bootstrap.widgets.TbButton', array(
+			'type'=>'secondary',
+			'label'=>'Preview All Indonesian TC',
+			'htmlOptions' => array(
+    			'onclick' => 'javascript:window.open("'.Yii::app()->request->baseUrl.'?r=inbox/ttcdoc/previewalltcind&id='.$model->primaryKey.'",
+    			"tradeconf","status=1,width=800,height=500,scrollbars=1,menubar=yes,titlebar=yes,toolbar=yes"); return false;')
+		)); ?>
+		&emsp;&emsp;&emsp;&emsp;
+		<?php $this->widget('bootstrap.widgets.TbButton', array(
+			'type'=>'secondary',
+			'icon'=>'ok',
+			'url'=>$this->createUrl('approve',array('id'=>$model->primaryKey)),
+			'label'=>'Approve',
+		)); ?>
+		<?php $this->widget('bootstrap.widgets.TbButton', array(
+			'type'=>'secondary',
+			'icon'=>'remove',
+			'url'=>$this->createUrl('reject',array('id'=>$model->primaryKey)),
+			'htmlOptions'=>array('class'=>'reject-inbox'),
+			'label'=>'Reject',
+		)); ?>
+	</div>
+	<?php 
+		$param  = array(array('class'=>'reject-inbox','title'=>'Reject Reason','url'=>'AjxPopReject','urlparam'=>array('id'=>$model->primaryKey,'label'=>false)));
+	  	AHelper::popupwindow($this, 600, 500, $param);
+	?>
+<?php endif; ?>

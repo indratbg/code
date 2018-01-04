@@ -1,0 +1,4 @@
+dev minapadi 10.5.1.55
+username : root
+password : sss12345
+
