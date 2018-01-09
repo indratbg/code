@@ -1,5 +1,4 @@
-CREATE OR REPLACE
-PROCEDURE SPR_STOCK_TO_SETTLE(
+create or replace PROCEDURE SPR_STOCK_TO_SETTLE(
     P_CONTR_DT_FROM DATE,
     P_CONTR_DT_TO   DATE,
     P_DUE_DT_FROM   DATE,
@@ -50,7 +49,8 @@ BEGIN
         RAND_VALUE ,
         GENERATE_DATE,
         CONTR_DT_FROM,
-        CONTR_DT_TO
+        CONTR_DT_TO,
+        typ
       )
     SELECT STK_CD      AS STK_CD,
       STK_DESC         AS STK_DESC,
@@ -63,16 +63,17 @@ BEGIN
       V_RANDOM_VALUE,
       P_GENERATE_DATE,
       p_contr_dt_from,
-      P_CONTR_DT_TO
+      P_CONTR_DT_TO,
+      decode(sign( SUM(DISCREPANCY)),-1,'R','D')TYP
     FROM
       (SELECT T_CONTRACTS.STK_CD    AS STK_CD,
         MST_COUNTER.STK_DESC        AS STK_DESC,
         TRIM(T_CONTRACTS.MRKT_TYPE) AS MARKET_TYPE,
         DECODE(T_CONTRACTS.MRKT_TYPE, 'NG', TRIM(T_CONTRACTS.BUY_BROKER_CD)
         || '/'
-        || TRIM(T_CONTRACTS.SELL_BROKER_CD), TO_CHAR(NULL))                                                                                         AS BS_BROKER_CD,
-        DECODE(SUBSTR(T_CONTRACTS.CONTR_NUM, 5, 1), 'B', T_CONTRACTS.QTY, 0)                                                                        AS BUY,
-        DECODE(SUBSTR(T_CONTRACTS.CONTR_NUM, 5, 1), 'J', T_CONTRACTS.QTY, 0)                                                                        AS SELL,
+        || TRIM(T_CONTRACTS.SELL_BROKER_CD), TO_CHAR(NULL)) AS BS_BROKER_CD,
+        DECODE(SUBSTR(T_CONTRACTS.CONTR_NUM, 5, 1), 'B', T_CONTRACTS.QTY, 0) AS BUY,
+        DECODE(SUBSTR(T_CONTRACTS.CONTR_NUM, 5, 1), 'J', T_CONTRACTS.QTY, 0)  AS SELL,
         DECODE(SUBSTR(T_CONTRACTS.CONTR_NUM, 5, 1), 'B', T_CONTRACTS.QTY, 0) - DECODE(SUBSTR(T_CONTRACTS.CONTR_NUM, 5, 1), 'J', T_CONTRACTS.QTY, 0) AS DISCREPANCY
       FROM INSISTPRO.T_CONTRACTS T_CONTRACTS,
         INSISTPRO.MST_COUNTER MST_COUNTER

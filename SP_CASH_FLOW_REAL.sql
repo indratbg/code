@@ -49,9 +49,8 @@ IS
               AND a.client_cd        =b.client_cd
               AND TRIM(A.GL_aCCT_CD) ='1200'
               AND A.PAYREC_DATE      =P_REP_DATE
-                --  AND SUBSTR(B.DOC_REF_NUM,5,2) NOT IN ('BO','JO')
+              AND SUBSTR(B.DOC_REF_NUM,6,1) <> 'O'--08jan2018
               AND A.PAYREC_TYPE IN('PV','RV','PD','RD')
-                --AND b.record_source               <> 'VCH'
               AND (M.CLIENT_TYPE_3= V_CLIENT_TYPE_3 OR V_CLIENT_TYPE_3 ='%')
             )
           GROUP BY payrec_num,kategori
@@ -86,7 +85,7 @@ IS
   --BROKER
     BEGIN
     INSERT INTO TMP_CASH_FLOW_REAL(KATEGORI,MASUK,keluar,RAND_VALUE,USER_ID)
-   SELECT b.sub_kategori kategori, DECODE(sub_kategori,'BB',MASUK,0)MASUK, DECODE(sub_kategori,'BJ',KELUAR,0)KELUAR, P_RAND_VALUE,P_USER_ID
+   SELECT b.sub_kategori kategori, DECODE(sub_kategori,'BJ',MASUK,0)MASUK, DECODE(sub_kategori,'BB',KELUAR,0)KELUAR, P_RAND_VALUE,P_USER_ID
       FROM
         (
           SELECT kategori, SUM(DECODE(SIGN(net_amt),1,net_amt,0))masuk, SUM(DECODE(SIGN(net_amt),-1,ABS(net_amt),0))keluar
@@ -116,7 +115,6 @@ IS
                   AND a.client_cd        =b.client_cd
                   AND TRIM(A.GL_aCCT_CD) ='1200'
                   AND A.PAYREC_DATE      =P_REP_DATE
-                    --  AND SUBSTR(B.DOC_REF_NUM,5,2) NOT IN ('BO','JO')
                   AND A.PAYREC_TYPE IN('PV','RV')
                 )
               GROUP BY kategori,payrec_num
@@ -183,25 +181,42 @@ IS
       --FIXED INCOME
        BEGIN
         INSERT INTO TMP_CASH_FLOW_REAL(KATEGORI,MASUK,keluar,RAND_VALUE,USER_ID)
-        SELECT B.SUB_KATEGORI KATEGORI,
-        DECODE(SUB_KATEGORI,'FJ',SELL,0)MASUK, 
-        DECODE(SUB_KATEGORI,'FB',BUY,0)KELUAR,
-        P_RAND_VALUE,P_USER_ID 
-       FROM
-        (
-        SELECT 'F' KATEGORI, SUM(decode(trx_type,'S',net_amount,0))SELL, 
-        SUM(DECODE(TRX_TYPE,'B',NET_AMOUNT,0))BUY FROM T_BOND_TRX 
-        WHERE VALUE_DT=P_REP_DATE
-        AND APPROVED_STS='A'
-        AND T_BOND_TRX.lawan_type    <> 'I'
-        AND nvl(journal_status,'X') = 'A'
-        AND RVPV_NUMBER IS NOT NULL
-        )A,
-        (SELECT 'F' KATEGORI, 'FJ' SUB_KATEGORI FROM DUAL
-        UNION ALL
-        SELECT 'F' KATEGORI, 'FB' SUB_KATEGORI FROM DUAL
-        )B
-        WHERE A.KATEGORI = B.KATEGORI;
+          SELECT B.SUB_KATEGORI KATEGORI, DECODE(SUB_KATEGORI,'FJ',MASUK,0)MASUK, DECODE(SUB_KATEGORI,'FB',KELUAR,0)KELUAR,
+            P_RAND_VALUE,P_USER_ID
+          FROM
+            (
+              SELECT kategori, SUM(DECODE(SIGN(NET_AMT),1,NET_AMT,0))MASUK, SUM(DECODE(SIGN(NET_AMT),-1,ABS(NET_AMT),0))KELUAR
+              FROM
+                (
+                  SELECT 'F' KATEGORI,rvpv_number, SUM(DECODE(TRX_TYPE,'S',NET_AMOUNT,-NET_AMOUNT))NET_AMT
+                  FROM T_BOND_TRX
+                  WHERE VALUE_DT              =P_REP_DATE
+                  AND APPROVED_STS            ='A'
+                  AND T_BOND_TRX.lawan_type  <> 'I'
+                  AND NVL(journal_status,'X') = 'A'
+                  AND RVPV_NUMBER            IS NOT NULL
+                  GROUP BY rvpv_number
+                  UNION
+                  SELECT 'F' KATEGORI,payrec_num,SUM(DECODE(db_Cr_flg,'C',PAYREC_AMT,-PAYREC_AMT))NET_AMT
+                  FROM t_payrecd A, MST_CLIENT M
+                  WHERE payrec_date            = P_REP_DATE
+                  AND payrec_type             IN ('RV','PV')
+                  AND SUBSTR(doc_ref_num ,6,1) = 'O'
+                  AND A.approved_sts           = 'A'
+                  AND M.APPROVED_STAT          ='A'
+                  AND M.CLIENT_TYPE_1         <>'B'
+                  AND A.CLIENT_CD              = M.CLIENT_CD
+                  GROUP BY payrec_num
+                )
+              GROUP BY KATEGORI
+            )
+            A, (
+              SELECT 'F' KATEGORI, 'FJ' SUB_KATEGORI FROM DUAL
+              UNION ALL
+              SELECT 'F' KATEGORI, 'FB' SUB_KATEGORI FROM DUAL
+            )
+            B
+          WHERE A.KATEGORI = B.KATEGORI; 
          EXCEPTION
             WHEN OTHERS THEN
             V_ERROR_CODE :=-40;
@@ -251,9 +266,6 @@ IS
             V_ERROR_MSG :=SUBSTR('INSERT INTO TMP_CASH_FLOW_REAL OTHERS '||SQLERRM,1,200);
             RAISE V_ERR;
           END;
-    
-
-
 
     COMMIT;
     P_ERROR_CODE := 1;
