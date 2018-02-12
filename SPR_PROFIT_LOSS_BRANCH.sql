@@ -95,25 +95,18 @@ SELECT TRIM(gl_acct_cd)
             SUM(DECODE(TO_CHAR(doc_date,'MM'), TO_CHAR(add_months(P_BGN_DATE,11),'MM'),1,0) * DECODE(db_cr_flg, 'D', 1, -1) * NVL(curr_val, 0)) AS Mon12,
             V_RANDOM_VALUE,
               P_USER_ID
-          FROM T_ACCOUNT_LEDGER
+          FROM T_ACCOUNT_LEDGER, ( SELECT DISTINCT gl_A_cd FROM V_LABARUGI_ACCT_APR2015 )g
           WHERE T_ACCOUNT_LEDGER.doc_date BETWEEN P_BGN_DATE AND P_END_DATE
           AND T_ACCOUNT_LEDGER.approved_sts = 'A'
-          AND T_ACCOUNT_LEDGER.gl_acct_cd  IN
-            ( SELECT DISTINCT gl_A_cd FROM V_LABARUGI_ACCT_APR2015
-            )
-          GROUP BY T_ACCOUNT_LEDGER.gl_acct_cd,
+          AND trim(T_ACCOUNT_LEDGER.gl_acct_cd) = trim(g.gl_A_cd)
+          GROUP BY trim(T_ACCOUNT_LEDGER.gl_acct_cd),
             T_ACCOUNT_LEDGER.sl_acct_cd;
 
     BEGIN
       INSERT
       INTO R_PROFIT_LOSS_BRANCH
         (
-          GL_ACCT_GROUP ,
-          GL_ACCT_GROUP_NAME ,
-          BRANCH_CD ,
-          BRANCH_NAME ,
-          GL_ACCT_CD ,
-          GL_ACCT_NAME ,
+          GL_ACCT_GROUP ,  GL_ACCT_GROUP_NAME , BRANCH_CD ,BRANCH_NAME , GL_ACCT_CD , GL_ACCT_NAME ,
           SL_ACCT_CD ,
           SL_ACCT_NAME ,
           MON01 ,
@@ -233,9 +226,7 @@ SELECT TRIM(gl_acct_cd)
                 doc_date ,
                 branch_cd
               FROM
-                (SELECT SUBSTR(contr_num,1,6)
-                  ||'0'
-                  ||SUBSTR(contr_num,8,6) contr_num,
+                (SELECT SUBSTR(contr_num,1,6)||'0'||SUBSTR(contr_num,8,6) contr_num,
                   trim(T_CONTRACTS.brch_cd) AS branch_cd
                 FROM T_CONTRACTS
                 WHERE contr_dt BETWEEN P_BGN_DATE AND P_END_DATE
@@ -385,12 +376,10 @@ SELECT TRIM(T_ACCOUNT_LEDGER.GL_ACCT_CD)
             SUM(DECODE(TO_CHAR(T_ACCOUNT_LEDGER.DOC_DATE,'MM'), '12',1,0) * DECODE(T_ACCOUNT_LEDGER.DB_CR_FLG, 'D', 1, -1) * NVL(T_ACCOUNT_LEDGER.CURR_VAL, 0)) AS MON12,
   		V_RANDOM_VALUE,
   		P_USER_ID          
-          FROM T_ACCOUNT_LEDGER
+          FROM T_ACCOUNT_LEDGER,  ( SELECT DISTINCT GL_A_CD FROM V_LABARUGI_ACCT_APR2013)g
           WHERE T_ACCOUNT_LEDGER.DOC_DATE BETWEEN P_BGN_DATE AND P_END_DATE
           AND T_ACCOUNT_LEDGER.APPROVED_STS = 'A'
-          AND T_ACCOUNT_LEDGER.GL_ACCT_CD    IN
-            ( SELECT DISTINCT GL_A_CD FROM V_LABARUGI_ACCT_APR2013
-            )
+          AND TRIM(T_ACCOUNT_LEDGER.GL_ACCT_CD) = TRIM(G.GL_A_CD)
           AND (P_FIXED_INCOME                   = 'TOTAL'
           OR (NOT (T_ACCOUNT_LEDGER.GL_ACCT_CD IN ('5300','5600')
           AND T_ACCOUNT_LEDGER.SL_ACCT_CD LIKE '90%')))

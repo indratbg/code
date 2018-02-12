@@ -76,7 +76,70 @@ v_cnt INTEGER;
 v_bank_cd mst_client_flacct.bank_cd%type;
 v_bank_acct mst_client_flacct.bank_acct_num%type;
 V_ACCT_NAME mst_client_flacct.ACCT_NAME%TYPE;
+V_BGN_DATE date;
+V_END_DATE date;
 BEGIN
+
+  --25JAN2018[INDRA]
+  IF P_UPD_STATUS='I' THEN
+    
+     V_BGN_DATE :=P_DOC_DATE-TO_CHAR(P_DOC_DATE,'DD')+1;
+      V_END_DATE := LAST_DAY(P_DOC_DATE); 
+      
+      begin
+      SELECT COUNT(1) INTO V_CNT FROM
+        (
+              SELECT FOLDER_CD 
+                FROM T_FUND_MOVEMENT
+                WHERE DOC_DATE BETWEEN V_BGN_DATE AND V_END_DATE
+                AND FOLDER_CD=P_FOLDER_CD
+                UNION
+                SELECT FIELD_VALUE 
+                FROM
+                  (
+                  SELECT A.UPDATE_DATE,A.UPDATE_SEQ,A.FIELD_VALUE FROM T_MANY_DETAIL A
+                  JOIN
+                   ( 
+                    SELECT UPDATE_DATE, UPDATE_SEQ, FIELD_VALUE
+                    FROM T_MANY_DETAIL
+                    WHERE UPDATE_DATE >TRUNC(SYSDATE)-10
+                    AND TABLE_NAME    ='T_FUND_MOVEMENT'
+                    AND FIELD_NAME  ='DOC_DATE'
+                    AND TO_DATE(FIELD_VALUE,'YYYY/MM/DD HH24:MI:SS') BETWEEN V_BGN_DATE AND V_END_DATE
+                    ) B ON A.UPDATE_DATE =B.UPDATE_DATE
+                    AND A.UPDATE_sEQ=B.UPDATE_SEQ
+                    WHERE  FIELD_NAME  ='FOLDER_CD'
+                    AND TABLE_NAME    ='T_FUND_MOVEMENT'
+                    AND A.FIELD_VALUE =P_FOLDER_CD
+                  )
+                  A
+                JOIN
+                  (
+                    SELECT UPDATE_DATE, UPDATE_SEQ
+                    FROM T_MANY_HEADER
+                    WHERE UPDATE_DATE   >TRUNC(SYSDATE)-10
+                    AND APPROVED_STATUS = 'E'
+                  )
+                  B
+                ON A.UPDATE_DATE = B.UPDATE_DATE
+                AND A.UPDATE_SEQ = B.UPDATE_SEQ
+      );
+       EXCEPTION
+      WHEN OTHERS THEN
+          v_error_code := -280;
+            v_error_msg :=  SUBSTR('check folder code '||SQLERRM,1,200);
+            RAISE v_err;
+      END;
+  
+      IF V_CNT>0 THEN 
+        v_error_code := -2006;
+        v_error_msg := 'REF '||P_FOLDER_CD||' sudah digunakan';
+        RAISE v_err;
+      END IF;
+  END IF;
+  
+
+
 
   BEGIN
   SELECT BANK_CD, BANK_ACCT_NUM,ACCT_NAME INTO V_BANK_CD, v_bank_acct, V_ACCT_NAME FROM mst_client_flacct WHERE CLIENT_CD=P_CLIENT_CD AND ACCT_STAT IN ('A','B') AND APPROVED_stat='A';

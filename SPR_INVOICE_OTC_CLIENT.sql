@@ -1,5 +1,4 @@
-create or replace 
-PROCEDURE SPR_INVOICE_OTC_CLIENT(
+CREATE OR REPLACE PROCEDURE SPR_INVOICE_OTC_CLIENT(
     P_BGN_DATE      DATE,
     P_END_DATE      DATE,
     P_BGN_STOCK     VARCHAR2,
@@ -17,11 +16,11 @@ PROCEDURE SPR_INVOICE_OTC_CLIENT(
 IS
   V_ERROR_MSG    VARCHAR2(200);
   V_ERROR_CD     NUMBER(10);
-  v_random_value NUMBER(10);
+  V_RANDOM_VALUE NUMBER(10);
   V_ERR          EXCEPTION;
 BEGIN
 
-  v_random_value := ABS(dbms_random.random);
+  V_RANDOM_VALUE := ABS(DBMS_RANDOM.RANDOM);
   
   BEGIN
     SP_RPT_REMOVE_RAND('R_INVOICE_OTC_CLIENT',V_RANDOM_VALUE,V_ERROR_MSG,V_ERROR_CD);
@@ -29,7 +28,7 @@ BEGIN
   WHEN OTHERS THEN
     V_ERROR_CD  := -10;
     V_ERROR_MSG := SUBSTR('SP_RPT_REMOVE_RAND '||V_ERROR_MSG||SQLERRM(SQLCODE),1,200);
-    RAISE V_err;
+    RAISE V_ERR;
   END;
   
   IF V_ERROR_CD  <0 THEN
@@ -42,121 +41,66 @@ BEGIN
     INSERT
     INTO R_INVOICE_OTC_CLIENT
       (
-        BGN_DATE ,
-        END_DATE ,
-        DOC_DT ,
-        CLIENT_CD ,
-        STK_CD ,
-        DOC_NUM ,
-        TOTAL_SHARE_QTY ,
-        WITHDRAWN_SHARE_QTY ,
-        DOC_REM ,
-        PRICE ,
-        BROKER,
-        CLIENT_NAME ,
-        OTC,
-        ACOPEN_FEE_FLG ,
-        USER_ID ,
-        RAND_VALUE ,
-        GENERATE_DATE,
-        NON_CHARGEABLE,
-        CHARGEABLE,
-        GRAND_OTC,
-        GRAND_TOTAL_SHARE_QTY,
-        GRAND_TOTAL_WITHDRAWN_QTY
+        BGN_DATE , END_DATE , DOC_DT , CLIENT_CD , STK_CD , DOC_NUM , TOTAL_SHARE_QTY , WITHDRAWN_SHARE_QTY ,
+        DOC_REM , PRICE , BROKER, CLIENT_NAME , OTC, ACOPEN_FEE_FLG , USER_ID , RAND_VALUE , GENERATE_DATE,
+        NON_CHARGEABLE, CHARGEABLE, GRAND_OTC,GRAND_TOTAL_SHARE_QTY, GRAND_TOTAL_WITHDRAWN_QTY
       )
-      
-      SELECT P_BGN_DATE,
-      P_END_DATE,
-      DOC_DT ,
-        CLIENT_CD ,
-        STK_CD ,
-        DOC_NUM ,
-        TOTAL_SHARE_QTY ,
-        WITHDRAWN_SHARE_QTY ,
-        DOC_REM ,
-        PRICE ,
-        BROKER,
-        CLIENT_NAME ,
-        OTC,
-        ACOPEN_FEE_FLG ,
-          P_USER_ID,
-      V_RANDOM_VALUE,
-      P_GENERATE_DATE,
-       sum(decode(acopen_fee_flg,'N',OTC,0)) over() non_charable ,
-        sum(decode(acopen_fee_flg,'Y',OTC,0)) over() chargeable ,
-         SUM(OTC) OVER() GRAND_OTC,
+      SELECT P_BGN_DATE,P_END_DATE, DOC_DT , T.CLIENT_CD , STK_CD , T.DOC_NUM , TOTAL_SHARE_QTY , WITHDRAWN_SHARE_QTY ,
+        DOC_REM , PRICE , BROKER, CLIENT_NAME , NVL(D.OTC_FEE,OTC), ACOPEN_FEE_FLG , P_USER_ID, V_RANDOM_VALUE, P_GENERATE_DATE,
+        SUM(DECODE(ACOPEN_FEE_FLG,'N',NVL(D.OTC_FEE,OTC),0)) OVER() NON_CHARABLE ,
+        SUM(DECODE(ACOPEN_FEE_FLG,'Y',NVL(D.OTC_FEE,OTC),0)) OVER() CHARGEABLE ,
+        SUM(NVL(D.OTC_FEE,OTC)) OVER() GRAND_OTC,
         SUM(TOTAL_SHARE_QTY) OVER()GRAND_TOTAL_SHARE_QTY,
         SUM(WITHDRAWN_SHARE_QTY) OVER() GRAND_WITHDRAWN_SHARE_QTY
-       FROM (
-    SELECT 
-      x.DOC_DT,
-      x.CLIENT_CD,
-      x.STK_CD,
-      x.doc_num,
-      x.TOTAL_SHARE_QTY,
-      x.WITHDRAWN_SHARE_QTY,
-      x.doc_rem,
-      x.price,
-      x.broker,
-      x.client_name,
-      x.otc * DECODE(SIGN(rw_cnt),0,1, DECODE(SIGN(y.net_qty * x.doc_type),0,0,1,1,-1,0) * DECODE(x.doc_num,y.minr_doc_num,1,y.minw_doc_num,1,0) ) otc,
-      x.acopen_fee_flg 
-    
-      
-    FROM
-      (SELECT a.DOC_DT,
-        a.CLIENT_CD,
-        a.STK_CD,
-        (DECODE(SUBSTR(a.DOC_NUM,7,1),'J',0,'S',0,a.TOTAL_SHARE_QTY)) TOTAL_SHARE_QTY,
-        (DECODE(SUBSTR(a.DOC_NUM,7,1),'J',a.TOTAL_SHARE_QTY,'S',a.TOTAL_SHARE_QTY,a.WITHDRAWN_SHARE_QTY)) WITHDRAWN_SHARE_QTY,
-        DECODE(a.s_d_type,'V','Trx',SUBSTR(a.DOC_NUM,5,1)) doc_rem,
-        a.price,
-        a.withdraw_reason_cd,
-        b.client_name,
-        P_OTC otc,
-        b.acopen_fee_flg,
-        a.doc_num,
-        a.broker,
-        DECODE(SUBSTR(a.doc_num,5,3),'RSN',1,'WSN',-1,0) AS doc_type
-      FROM t_stk_movement a,
-        mst_client b
-      WHERE a.seqno              = 1
-      AND SUBSTR(a.DOC_NUM,5,3) IN ('RSN','WSN','JVB','JVS')
-      AND a.client_cd            = b.client_cd
-      AND a.doc_stat             = '2'
-      AND a.doc_dt BETWEEN P_BGN_DATE AND P_END_DATE
-      AND a.client_cd BETWEEN P_BGN_CLIENT AND P_END_CLIENT
-      AND a.stk_cd BETWEEN P_BGN_STOCK AND P_END_STOCK
-      AND a.broker IS NOT NULL
-      AND a.broker BETWEEN P_BGN_BROKER AND P_END_BROKER
-      ) x,
-      (SELECT a.DOC_DT,
-        a.CLIENT_CD,
-        a.STK_CD,
-        SUM(DECODE(SUBSTR(doc_num,5,1),'J',0,a.total_share_qty - a.withdrawn_share_qty)) AS net_qty,
-        MIN(DECODE(SUBSTR(doc_num,5,1),'R',doc_num,'_')) minr_doc_num,
-        MIN(DECODE(SUBSTR(doc_num,5,1),'W',doc_num,'_')) minw_doc_num,
-        SUM(DECODE(SUBSTR(doc_num,5,1),'R',1,0)) * SUM(DECODE(SUBSTR(doc_num,5,1),'W',1,0)) RW_cnt
-      FROM t_stk_movement a
-      WHERE a.seqno              = 1
-      AND SUBSTR(a.DOC_NUM,5,3) IN ('RSN','WSN','JVS','JVB')
-      AND a.doc_stat             = '2'
-      AND a.doc_dt BETWEEN P_BGN_DATE AND P_END_DATE
-      AND a.broker IS NOT NULL
-      GROUP BY a.DOC_DT,
-        a.CLIENT_CD,
-        a.STK_CD
-      ) y
-    WHERE x.doc_dt  = y.doc_dt
-    AND x.client_cd = y.client_cd
-    AND x.stk_cd    = y.stk_cd 
-    );
+       FROM 
+       (
+              SELECT 
+                X.DOC_DT, X.CLIENT_CD, X.STK_CD, X.DOC_NUM, X.TOTAL_SHARE_QTY, X.WITHDRAWN_SHARE_QTY, X.DOC_REM, X.PRICE,
+                X.BROKER, X.CLIENT_NAME,
+                X.OTC * DECODE(SIGN(RW_CNT),0,1, DECODE(SIGN(Y.NET_QTY * X.DOC_TYPE),0,0,1,1,-1,0) * DECODE(X.DOC_NUM,Y.MINR_DOC_NUM,1,Y.MINW_DOC_NUM,1,0) ) OTC,
+                X.ACOPEN_FEE_FLG 
+              FROM
+                (
+                  SELECT A.DOC_DT, A.CLIENT_CD, A.STK_CD,
+                    (DECODE(SUBSTR(A.DOC_NUM,7,1),'J',0,'S',0,A.TOTAL_SHARE_QTY)) TOTAL_SHARE_QTY,
+                    (DECODE(SUBSTR(A.DOC_NUM,7,1),'J',A.TOTAL_SHARE_QTY,'S',A.TOTAL_SHARE_QTY,A.WITHDRAWN_SHARE_QTY)) WITHDRAWN_SHARE_QTY,
+                    DECODE(A.S_D_TYPE,'V','TRX',SUBSTR(A.DOC_NUM,5,1)) DOC_REM, A.PRICE, A.WITHDRAW_REASON_CD, B.CLIENT_NAME, P_OTC OTC,
+                    B.ACOPEN_FEE_FLG, A.DOC_NUM, A.BROKER,
+                    DECODE(SUBSTR(A.DOC_NUM,5,3),'RSN',1,'WSN',-1,0) AS DOC_TYPE
+                  FROM T_STK_MOVEMENT A, MST_CLIENT B
+                  WHERE A.SEQNO              = 1
+                  AND SUBSTR(A.DOC_NUM,5,3) IN ('RSN','WSN','JVB','JVS')
+                  AND A.CLIENT_CD            = B.CLIENT_CD
+                  AND A.DOC_STAT             = '2'
+                  AND A.DOC_DT BETWEEN P_BGN_DATE AND P_END_DATE
+                  AND A.CLIENT_CD BETWEEN P_BGN_CLIENT AND P_END_CLIENT
+                  AND A.STK_CD BETWEEN P_BGN_STOCK AND P_END_STOCK
+                  AND A.BROKER IS NOT NULL
+                  AND A.BROKER BETWEEN P_BGN_BROKER AND P_END_BROKER
+                ) X,
+                (
+                  SELECT A.DOC_DT, A.CLIENT_CD, A.STK_CD,
+                    SUM(DECODE(SUBSTR(DOC_NUM,5,1),'J',0,A.TOTAL_SHARE_QTY - A.WITHDRAWN_SHARE_QTY)) AS NET_QTY,
+                    MIN(DECODE(SUBSTR(DOC_NUM,5,1),'R',DOC_NUM,'_')) MINR_DOC_NUM,
+                    MIN(DECODE(SUBSTR(DOC_NUM,5,1),'W',DOC_NUM,'_')) MINW_DOC_NUM,
+                    SUM(DECODE(SUBSTR(DOC_NUM,5,1),'R',1,0)) * SUM(DECODE(SUBSTR(DOC_NUM,5,1),'W',1,0)) RW_CNT
+                  FROM T_STK_MOVEMENT A
+                  WHERE A.SEQNO              = 1
+                  AND SUBSTR(A.DOC_NUM,5,3) IN ('RSN','WSN','JVS','JVB')
+                  AND A.DOC_STAT             = '2'
+                  AND A.DOC_DT BETWEEN P_BGN_DATE AND P_END_DATE
+                  AND A.BROKER IS NOT NULL
+                  GROUP BY A.DOC_DT, A.CLIENT_CD, A.STK_CD
+                ) Y
+                WHERE X.DOC_DT  = Y.DOC_DT
+                AND X.CLIENT_CD = Y.CLIENT_CD
+                AND X.STK_CD    = Y.STK_CD 
+       )T LEFT JOIN T_DAILY_OTC_JUR D ON T.DOC_NUM=D.DOC_NUM;
   EXCEPTION
   WHEN OTHERS THEN
     V_ERROR_CD  := -30;
     V_ERROR_MSG := SUBSTR('INSERT R_INVOICE_OTC_CLIENT '||V_ERROR_MSG||SQLERRM(SQLCODE),1,200);
-    RAISE V_err;
+    RAISE V_ERR;
   END;
   
   P_RANDOM_VALUE :=V_RANDOM_VALUE;

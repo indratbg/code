@@ -31,7 +31,7 @@ IS
   V_ERROR_CD     NUMBER(10);
   v_random_value NUMBER(10);
   V_ERR          EXCEPTION;
-  
+  V_BROKER_CD VARCHAR2(2);
 BEGIN
 
   v_random_value := ABS(dbms_random.random);
@@ -51,77 +51,93 @@ BEGIN
     RAISE V_ERR;
   END IF;
 
+  --CHECK BROKER CD
 
+  BEGIN
+  SELECT SUBSTR(BROKER_CD,1,2) INTO V_BROKER_CD FROM V_BROKER_SUBREK;
+  EXCEPTION
+    WHEN OTHERS THEN
+      V_ERROR_CD  := -10;
+      V_ERROR_MSG := SUBSTR('SP_RPT_REMOVE_RAND '||V_ERROR_MSG||SQLERRM(SQLCODE),1,200);
+      RAISE V_err;
+    END;
+
+    IF V_BROKER_CD = 'MU' THEN
+
+      INSERT INTO TMP_CLIENT_ACTIVITY(CONTR_NUM,CLIENT_CD,MAIN_REM_CD,BJ,DOC_DATE,
+        DUE_DATE,STK_CD,PRICE,QTY,LOT_SIZE,NET,COMMISSION,VAT,TRANS_LEVY,PPH,BROK,
+        BROK_PERC,BRCH_CD,MRKT_TYPE,AMT,BROK_CD,RAND_VALUE,USER_ID)
+        SELECT 'Min fee' CONTR_NUM,
+            b.sl_acct_cd client_cd,
+            trim(b.rem_cd) MAIN_REM_CD,
+            ' ' BJ,
+            b.doc_date,
+            b.due_date,
+            'ZZZZ' STK_CD,
+            0 PRICE,
+            0 QTY,
+            0 LOT_SIZE,
+            0 NET,
+            SUM(DECODE(g.jur_type,'COMM', DECODE(a.db_cr_flg,'C',1,-1) * a.curr_val,0)) COMMISSION,
+            SUM(DECODE(g.jur_type,'PPNO', DECODE(a.db_cr_flg,'C',1,-1) * a.curr_val,0)) VAT,
+            0 TRANS_LEVY,
+            0 PPH,
+            SUM(DECODE(g.jur_type,'CLIE', DECODE(a.db_cr_flg,'D',1,-1) * a.curr_val,0)) BROK,
+            0 BROK_PERC,
+            trim(b.branch_code) BRCH_CD,
+            '' mrkt_type,
+            SUM(DECODE(g.jur_type,'CLIE', DECODE(A.db_cr_flg,'D',1,-1) * A.curr_val,0)) amt,
+            '' BROK_CD, V_RANDOM_VALUE,P_USER_ID
+          FROM T_ACCOUNT_LEDGER a,
+            (SELECT tal.xn_doc_num,
+              tal.sl_acct_cd,
+              tal.doc_date,
+              tal.due_date,
+              m.branch_code,
+              m.rem_cd
+            FROM T_ACCOUNT_LEDGER tal,
+              MST_CLIENT m
+            WHERE tal.doc_date BETWEEN P_BGN_DATE AND P_END_DATE
+            AND tal.sl_acct_cd BETWEEN P_BGN_CLIENT AND P_END_CLIENT
+            AND tal.xn_doc_num LIKE '%MFE%'
+            AND tal.approved_sts <> 'C'
+            AND tal.tal_id        = 1
+            AND tal.sl_acct_cd    = m.client_cd
+            AND trim(m.branch_code) BETWEEN P_BGN_BRANCH AND P_END_BRANCH
+            AND trim(m.rem_cd) BETWEEN P_BGN_REM AND P_END_REM
+            AND m.client_type_3 LIKE P_CLIENT_TYPE3
+            ) b,
+            (SELECT gl_a,
+              jur_type
+            FROM MST_GLA_TRX
+            WHERE jur_type IN ('CLIE','PPNO','POSD','COMM')
+            ) g
+          WHERE a.xn_doc_num  = b.xn_doc_num
+          AND a.gl_acct_Cd    = g.gl_a
+          AND P_STA           = '%'
+          AND P_STA_TYPE      = '%'
+          AND P_BGN_MRKT_TYPE = '%'
+          GROUP BY b.sl_acct_cd,
+            b.doc_date,
+            b.due_date,
+            b.branch_code,
+            b.rem_cd;
+
+    END IF;
 
   BEGIN
     INSERT
     INTO R_CLIENT_ACTIVITY
       (
-        FROM_DATE,
-        TO_DATE,
-        CLIENT_CD ,
-        CLIENT_NAME ,
-        REM_CD ,
-        REM_NAME ,
-        CONTR_NUM ,
-        BJ ,
-        CONTR_DT ,
-        DUE_DT_FOR_AMT ,
-        STK_CD ,
-        PRICE ,
-        QTY ,
-        LOT_SIZE ,
-        NET ,
-        COMMISSION ,
-        VAT ,
-        TRANS_LEVY ,
-        PPH ,
-        BROK ,
-        BROK_PERC ,
-        BRCH_CD ,
-        MRKT_TYPE ,
-        AMT ,
-        CUSTODIAN ,
-        USER_ID ,
-        RAND_VALUE ,
-        GENERATE_DATE,
-        CUSTODY_FLG,
-        GROUP_BY,
-        BROK_CD,
-        BROK_NAME
+        FROM_DATE, TO_DATE,  CLIENT_CD , CLIENT_NAME , REM_CD , REM_NAME ,  CONTR_NUM , BJ ,
+        CONTR_DT , DUE_DT_FOR_AMT , STK_CD , PRICE , QTY , LOT_SIZE ,NET , COMMISSION ,
+        VAT , TRANS_LEVY ,PPH ,BROK ,BROK_PERC ,BRCH_CD ,MRKT_TYPE ,AMT ,CUSTODIAN ,
+        USER_ID , RAND_VALUE , GENERATE_DATE,CUSTODY_FLG,GROUP_BY,BROK_CD,BROK_NAME
       )
-    SELECT P_BGN_DATE,
-      P_END_DATE,
-      MST_CLIENT.CLIENT_CD,
-      MST_CLIENT.CLIENT_NAME,
-      T_CONTRACTS.REM_CD,
-      MST_SALES.REM_NAME,
-      T_CONTRACTS.CONTR_NUM,
-      T_CONTRACTS.BJ,
-      T_CONTRACTS.CONTR_DT,
-      T_CONTRACTS.DUE_DT_FOR_AMT,
-      T_CONTRACTS.STK_CD,
-      T_CONTRACTS.PRICE,
-      T_CONTRACTS.QTY,
-      T_CONTRACTS.LOT_SIZE,
-      T_CONTRACTS.NET,
-      T_CONTRACTS.COMMISSION,
-      T_CONTRACTS.VAT,
-      T_CONTRACTS.TRANS_LEVY,
-      T_CONTRACTS.PPH,
-      T_CONTRACTS.BROK,
-      T_CONTRACTS.BROK_PERC/100 BROK_PERC,
-      T_CONTRACTS.BRCH_CD,
-      T_CONTRACTS.MRKT_TYPE,
-      T_CONTRACTS.AMT,
-      p.CUSTODY_NAME AS custodian ,
-      P_USER_ID,
-      V_RANDOM_VALUE,
-      P_GENERATE_DATE,
-      P_CUSTODY,
-      P_GROUP_BY,
-      BROK_CD,--22APR2016
-      BROKER_NAME--22APR2016
+    SELECT P_BGN_DATE,P_END_DATE,  M.CLIENT_CD, M.CLIENT_NAME,  T.REM_CD, S.REM_NAME, T.CONTR_NUM, T.BJ,
+      T.CONTR_DT, T.DUE_DT_FOR_AMT, T.STK_CD, T.PRICE, T.QTY, T.LOT_SIZE, T.NET, T.COMMISSION,
+      T.VAT,T.TRANS_LEVY, T.PPH, T.BROK,  T.BROK_PERC/100 BROK_PERC,  T.BRCH_CD,  T.MRKT_TYPE,   T.AMT, p.CUSTODY_NAME AS custodian ,  
+      P_USER_ID, V_RANDOM_VALUE, P_GENERATE_DATE, P_CUSTODY,P_GROUP_BY, BROK_CD,  BROKER_NAME
     FROM
       (SELECT T_CONTRACTS.CONTR_NUM,
         T_CONTRACTS.CLIENT_CD,
@@ -169,80 +185,37 @@ BEGIN
       AND P_MRKT_TYPE = 'NG'))
       AND SCRIP_DAYS_C BETWEEN P_BGN_DAYS AND P_END_DAYS
       UNION ALL
-      SELECT 'Min fee' CONTR_NUM,
-        b.sl_acct_cd client_cd,
-        trim(b.rem_cd) MAIN_REM_CD,
-        ' ' BJ,
-        b.doc_date,
-        b.due_date,
-        'ZZZZ' STK_CD,
-        0 PRICE,
-        0 QTY,
-        0 LOT_SIZE,
-        0 NET,
-        SUM(DECODE(g.jur_type,'COMM', DECODE(a.db_cr_flg,'C',1,-1) * a.curr_val,0)) COMMISSION,
-        SUM(DECODE(g.jur_type,'PPNO', DECODE(a.db_cr_flg,'C',1,-1) * a.curr_val,0)) VAT,
-        0 TRANS_LEVY,
-        0 PPH,
-        SUM(DECODE(g.jur_type,'CLIE', DECODE(a.db_cr_flg,'D',1,-1) * a.curr_val,0)) BROK,
-        0 BROK_PERC,
-        trim(b.branch_code) BRCH_CD,
-        '' mrkt_type,
-        SUM(DECODE(g.jur_type,'CLIE', DECODE(A.db_cr_flg,'D',1,-1) * A.curr_val,0)) amt,
-        '' BROK_CD
-      FROM T_ACCOUNT_LEDGER a,
-        (SELECT tal.xn_doc_num,
-          tal.sl_acct_cd,
-          tal.doc_date,
-          tal.due_date,
-          m.branch_code,
-          m.rem_cd
-        FROM T_ACCOUNT_LEDGER tal,
-          MST_CLIENT m
-        WHERE tal.doc_date BETWEEN P_BGN_DATE AND P_END_DATE
-        AND tal.sl_acct_cd BETWEEN P_BGN_CLIENT AND P_END_CLIENT
-        AND tal.xn_doc_num LIKE '%MFE%'
-        AND tal.approved_sts <> 'C'
-        AND tal.tal_id        = 1
-        AND tal.sl_acct_cd    = m.client_cd
-        AND trim(m.branch_code) BETWEEN P_BGN_BRANCH AND P_END_BRANCH
-        AND trim(m.rem_cd) BETWEEN P_BGN_REM AND P_END_REM
-        AND m.client_type_3 LIKE P_CLIENT_TYPE3
-        ) b,
-        (SELECT gl_a,
-          jur_type
-        FROM MST_GLA_TRX
-        WHERE jur_type IN ('CLIE','PPNO','POSD','COMM')
-        ) g
-      WHERE a.xn_doc_num  = b.xn_doc_num
-      AND a.gl_acct_Cd    = g.gl_a
-      AND P_STA           = '%'
-      AND P_STA_TYPE      = '%'
-      AND P_BGN_MRKT_TYPE = '%'
-      GROUP BY b.sl_acct_cd,
-        b.doc_date,
-        b.due_date,
-        b.branch_code,
-        b.rem_cd
-      ) T_CONTRACTS,
-      MST_CLIENT,
-      MST_SALES,
+      SELECT CONTR_NUM,CLIENT_CD,MAIN_REM_CD,BJ,DOC_DATE,DUE_DATE,STK_CD,PRICE,QTY,LOT_SIZE,NET,COMMISSION,
+      VAT,TRANS_LEVY,PPH,BROK,BROK_PERC,BRCH_CD,MRKT_TYPE ,AMT,BROK_CD
+      FROM TMP_CLIENT_ACTIVITY WHERE RAND_VALUE=V_RANDOM_VALUE AND USER_ID=P_USER_ID
+      ) T,
+      MST_CLIENT M,
+      MST_SALES S,
       mst_bank_custody p,
       MST_BROKER r
-    WHERE ( T_CONTRACTS.CLIENT_CD   = MST_CLIENT.CLIENT_CD )
-    AND ( T_CONTRACTS.REM_CD        = MST_SALES.REM_CD )
-    AND T_CONTRACTS.BROK_CD = R.BROKER_CD(+)--22APR2016
-    AND (( MST_CLIENT.CUSTODIAN_CD IS NOT NULL
+    WHERE ( T.CLIENT_CD   = M.CLIENT_CD )
+    AND ( T.REM_CD        = S.REM_CD )
+    AND T.BROK_CD = R.BROKER_CD(+)--22APR2016
+    AND (( M.CUSTODIAN_CD IS NOT NULL
     AND P_CUSTODY                       = 'Y')
     OR P_CUSTODY                        = 'N')
-    AND (MST_CLIENT.CUSTODIAN_CD    = p.CBEST_CD(+) );
+    AND (M.CUSTODIAN_CD    = p.CBEST_CD(+) );
   EXCEPTION
   WHEN OTHERS THEN
     V_ERROR_CD  := -30;
-    V_ERROR_MSG := SUBSTR('INSERT R_CLIENT_ACTIVITY '||V_ERROR_MSG||SQLERRM(SQLCODE),1,200);
+    V_ERROR_MSG := SUBSTR('INSERT R_CLIENT_ACTIVITY '||SQLERRM(SQLCODE),1,200);
     RAISE V_err;
   END;
 
+--DELETE TMP_CLIENT_ACTIVITY
+BEGIN
+DELETE FROM TMP_CLIENT_ACTIVITY WHERE RAND_VALUE=V_RANDOM_VALUE AND USER_ID=P_USER_ID;
+EXCEPTION
+  WHEN OTHERS THEN
+    V_ERROR_CD  := -50;
+    V_ERROR_MSG := SUBSTR('DELETE TMP_CLIENT_ACTIVITY '||SQLERRM(SQLCODE),1,200);
+    RAISE V_err;
+  END;
   
   P_RANDOM_VALUE :=V_RANDOM_VALUE;
   P_ERROR_CD     := 1 ;

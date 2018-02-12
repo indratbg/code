@@ -1,0 +1,167 @@
+create or replace PROCEDURE SP_CORP_ACT_X_DATE(
+    P_TODAY DATE,
+    P_X_DATE            DATE,
+    P_RECORDING_DATE    DATE,
+    P_DISTRIBUTION_DATE DATE,
+    P_STK_CD MST_COUNTER.STK_CD%TYPE,
+    P_PEMBAGI IN T_CORP_ACT.FROM_QTY%TYPE,
+    P_PENGALI IN T_CORP_ACT.TO_QTY%TYPE,
+    P_CA_TYPE T_CORP_ACT.CA_TYPE%TYPE,
+    P_USER_ID T_CORP_ACT.USER_ID%TYPE,
+    P_ERROR_CODE OUT NUMBER,
+    P_ERROR_MSG OUT VARCHAR2)
+IS
+  V_CUM_DT DATE;
+  V_BGN_DT DATE;
+  
+  CURSOR CSR_BAL IS
+    SELECT DOC_DT,CLIENT_CD,SUM(MVMT_QTY)BAL_QTY
+    FROM
+      (
+        SELECT DOC_DT +(1/24*23) DOC_DT, CLIENT_CD, STK_CD, DECODE(SUBSTR(DOC_NUM, 5, 2), 'BR', 1, 'JR', 1, 'BI', 1, 'JI', 1, 'BO', 1, 'JO', 1, 'RS', 1, 'WS', 1, 0) * DECODE(DB_CR_FLG, 'D', 1, - 1) *(TOTAL_SHARE_QTY + WITHDRAWN_SHARE_QTY) MVMT_QTY
+        FROM T_STK_MOVEMENT
+        WHERE DOC_DT BETWEEN P_X_DATE AND P_RECORDING_DATE
+        AND TRIM(GL_ACCT_CD) IN ('10', '12')
+        AND DUE_DT_FOR_CERT  <= P_RECORDING_DATE
+        AND DOC_DT =P_TODAY
+        AND STK_CD            =P_STK_CD
+        AND S_D_TYPE          ='C'
+        AND DOC_STAT='2'
+      )
+  GROUP BY DOC_DT,CLIENT_CD;
+  
+  V_ERR        EXCEPTION;
+  V_ERROR_CODE NUMBER;
+  V_ERROR_MSG  VARCHAR2(200);
+  V_CNT NUMBER;
+BEGIN
+  
+  IF P_CA_TYPE='REVERSE' THEN
+  
+    FOR REC IN CSR_BAL LOOP
+    
+      BEGIN
+      select COUNT(1) INTO V_CNT from t_corp_act_fo 
+      where STK_CD=P_STK_CD 
+      AND CA_TYPE=P_CA_TYPE 
+      AND FROM_DT=REC.DOC_DT 
+      AND TO_DT=P_DISTRIBUTION_DATE
+      AND CLIENT_CD=REC.CLIENT_CD;
+     EXCEPTION
+     WHEN OTHERS THEN
+        V_ERROR_CODE := -16;
+        V_ERROR_MSG  := SUBSTR('INSERT T_CORP_ACT_FO '||P_STK_CD||' '||SQLERRM,1,200);
+        RAISE V_ERR;
+     END;
+     
+     IF V_CNT>0 THEN
+     
+           BEGIN
+           DELETE FROM  t_corp_act_fo 
+            where STK_CD=P_STK_CD 
+            AND CA_TYPE=P_CA_TYPE 
+            AND FROM_DT=REC.DOC_DT 
+            AND TO_DT=P_DISTRIBUTION_DATE
+            AND CLIENT_CD=REC.CLIENT_CD;
+              EXCEPTION
+           WHEN OTHERS THEN
+              V_ERROR_CODE := -20;
+              V_ERROR_MSG  := SUBSTR('INSERT T_CORP_ACT_FO '||P_STK_CD||' '||SQLERRM,1,200);
+              RAISE V_ERR;
+           END;
+           
+     END IF;
+
+      BEGIN
+        INSERT
+        INTO T_CORP_ACT_FO
+          (
+            CA_TYPE, FROM_DT, TO_DT, CLIENT_CD, STK_CD, QTY_RECEIVE, QTY_WITHDRAW, USER_ID, CRE_DT, STATUS
+          )
+          VALUES
+          (
+            P_CA_TYPE,REC.DOC_DT,P_DISTRIBUTION_DATE, REC.CLIENT_CD,P_STK_CD,0, TRUNC(REC.BAL_QTY - (REC.BAL_QTY * P_PENGALI / P_PEMBAGI),0), P_USER_ID,SYSDATE,'A');
+      EXCEPTION
+      WHEN OTHERS THEN
+        V_ERROR_CODE := -25;
+         V_ERROR_MSG  := SUBSTR('DELETE FROM  t_corp_act_fo '||P_STK_CD||' '||REC.CLIENT_CD||SQLERRM,1,200);
+        RAISE V_ERR;
+      END;
+      
+    END LOOP;
+    
+  END IF;
+  
+  IF P_CA_TYPE='SPLIT' THEN
+  
+    FOR REC IN CSR_BAL LOOP
+    
+          BEGIN
+      select COUNT(1) INTO V_CNT from t_corp_act_fo 
+      where STK_CD=P_STK_CD 
+      AND CA_TYPE=P_CA_TYPE 
+      AND FROM_DT=REC.DOC_DT 
+      AND TO_DT=P_DISTRIBUTION_DATE
+      AND CLIENT_CD=REC.CLIENT_CD;
+     EXCEPTION
+     WHEN OTHERS THEN
+        V_ERROR_CODE := -16;
+        V_ERROR_MSG  := SUBSTR('SELECT COUNT T_CORP_ACT_FO '||P_STK_CD||' '||REC.CLIENT_CD||SQLERRM,1,200);
+        RAISE V_ERR;
+     END;
+     
+     IF V_CNT>0 THEN
+     
+           BEGIN
+           DELETE FROM  t_corp_act_fo 
+            where STK_CD=P_STK_CD 
+            AND CA_TYPE=P_CA_TYPE 
+            AND FROM_DT=REC.DOC_DT 
+            AND TO_DT=P_DISTRIBUTION_DATE
+            AND CLIENT_CD=REC.CLIENT_CD;
+              EXCEPTION
+           WHEN OTHERS THEN
+              V_ERROR_CODE := -18;
+              V_ERROR_MSG  := SUBSTR(' DELETE FROM  t_corp_act_fo '||P_STK_CD||' '||REC.CLIENT_CD||SQLERRM,1,200);
+              RAISE V_ERR;
+           END;
+           
+     END IF;
+    
+      BEGIN
+        INSERT
+        INTO T_CORP_ACT_FO
+          (
+            CA_TYPE, FROM_DT, TO_DT, CLIENT_CD, STK_CD, QTY_RECEIVE, QTY_WITHDRAW, USER_ID, CRE_DT, STATUS
+          )
+          VALUES
+          (
+            P_CA_TYPE,REC.DOC_DT,P_DISTRIBUTION_DATE, REC.CLIENT_CD,P_STK_CD, TRUNC( (REC.BAL_QTY * P_PENGALI / P_PEMBAGI) - REC.BAL_QTY,0),0, P_USER_ID,SYSDATE,'A'
+          );
+      EXCEPTION
+      WHEN OTHERS THEN
+        V_ERROR_CODE := -30;
+        V_ERROR_MSG  := SUBSTR('INSERT T_CORP_ACT_FO '||P_STK_CD||' '||SQLERRM,1,200);
+        RAISE V_ERR;
+      END;
+      
+    END LOOP;
+    
+  END IF;
+  
+  P_ERROR_CODE := 1;
+  P_ERROR_MSG  := '';
+  
+EXCEPTION
+WHEN NO_DATA_FOUND THEN
+  NULL;
+WHEN V_ERR THEN
+  P_ERROR_CODE := V_ERROR_CODE;
+  P_ERROR_MSG  := V_ERROR_MSG;
+  ROLLBACK;
+WHEN OTHERS THEN
+  P_ERROR_CODE := -1;
+  P_ERROR_MSG  := SUBSTR(SQLERRM,1,200);
+  ROLLBACK;
+  RAISE;
+END SP_CORP_ACT_X_DATE;

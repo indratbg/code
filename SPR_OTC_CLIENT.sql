@@ -33,22 +33,42 @@ BEGIN
   END IF;
   
   BEGIN
-    INSERT INTO R_OTC_CLIENT (CLIENT_CD, CLIENT_NAME, ACOPEN_FEE_FLG, OTC_CLIENT, USER_ID, RAND_VALUE, GENERATE_DATE )
-       select CLIENT_CD,CLIENT_NAME,ACOPEN_FEE_FLG,SUM( DECODE(NET_QTY , 0,0, P_OTC_FEE)) OTC_CLIENT, P_USER_ID,V_RANDOM_VALUE,P_GENERATE_DATE
-            from (
-                  select  a.DOC_DT, a.CLIENT_CD, B.CLIENT_NAME, a.STK_CD, ACOPEN_FEE_FLG,
-                  sum(a.TOTAL_SHARE_QTY - a.WITHDRAWN_SHARE_QTY) as NET_QTY
-                  from IPNEXTG.T_STK_MOVEMENT a, IPNEXTG.MST_CLIENT B
-                  where a.SEQNO              = 1
-                  and a.CLIENT_CD            = B.CLIENT_CD
-                  and SUBSTR(a.DOC_NUM,5,3) in ('RSN','WSN')
-                  and a.DOC_STAT             = '2'
-                  and a.DOC_DT between P_BGN_DT  and P_END_DT
-                  and a.BROKER is not null
-                  and ((B.ACOPEN_FEE_FLG=P_CHARGE_FLG)  or P_CHARGE_FLG='%')
-                  group by a.DOC_DT, a.CLIENT_CD, a.STK_CD, B.CLIENT_NAME,ACOPEN_FEE_FLG
-                  )
-           group by CLIENT_CD, CLIENT_NAME,ACOPEN_FEE_FLG;
+    INSERT INTO R_OTC_CLIENT (ACOPEN_FEE_FLG,CLIENT_CD, CLIENT_NAME, OTC_CLIENT, USER_ID, RAND_VALUE, GENERATE_DATE )
+      
+      SELECT CHARGE_FLG,CLIENT_CD,CLIENT_NAME,SUM_OTC, P_USER_ID,V_RANDOM_VALUE,P_GENERATE_DATE
+      FROM 
+      (
+          SELECT DECODE(B.TIDAK_DIJURNAL,'Y','N','Y')CHARGE_FLG,A.CLIENT_CD,A.CLIENT_NAME,SUM_OTC
+          FROM MST_CLIENT A
+          JOIN
+            (
+              SELECT client_cd,tidak_dijurnal, MAX(sum_otc)sum_otc
+              FROM t_daily_otc_jur
+              WHERE JUR_DATE BETWEEN P_BGN_DT AND P_END_DT
+              GROUP BY client_cd,tidak_dijurnal
+            )
+            B
+          ON A.CLIENT_CD     =B.CLIENT_CD
+          AND A.APPROVED_STAT='A'
+          UNION ALL
+          SELECT 'N' CHARGE_FLG, client_cd,CLIENT_NAME,SUM( DECODE(net_qty , 0,0, P_OTC_FEE)) OTC_CLIENT
+          FROM
+            (
+              SELECT A.DOC_DT, A.CLIENT_CD, b.CLIENT_NAME, A.STK_CD, SUM(A.TOTAL_SHARE_QTY - A.WITHDRAWN_SHARE_QTY) AS NET_QTY
+              FROM IPNEXTG.T_STK_MOVEMENT A, IPNEXTG.MST_CLIENT B
+              WHERE A.SEQNO              = 1
+              AND A.CLIENT_CD            = B.CLIENT_CD
+              AND SUBSTR(A.DOC_NUM,5,3) IN ('RSN','WSN','JVS','JVB')
+              AND A.DOC_STAT             = '2'
+              AND A.DOC_DT BETWEEN P_BGN_DT AND P_END_DT
+              AND A.BROKER       IS NOT NULL
+              AND B.ACOPEN_FEE_FLG='N'
+              AND B.APPROVED_STAT ='A'
+              GROUP BY A.DOC_DT, A.CLIENT_CD, A.STK_CD, b.CLIENT_NAME
+            )
+          GROUP BY client_Cd, CLIENT_NAME
+      )
+      WHERE (CHARGE_FLG=P_CHARGE_FLG OR P_CHARGE_FLG='%');
   EXCEPTION
   WHEN OTHERS THEN
     V_ERROR_CD  := -30;

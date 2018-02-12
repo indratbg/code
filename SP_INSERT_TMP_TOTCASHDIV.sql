@@ -7,6 +7,8 @@ create or replace PROCEDURE SP_INSERT_TMP_TOTCASHDIV(
     P_ERROR_CODE OUT NUMBER,
     P_ERROR_MSG OUT VARCHAR2 )
 IS
+--12feb2018 tambah tender offer sell pada payment date
+--14sep2017 ganti TMP
 -- 22jun2017 gen xml WT utk trf total cash div dr subrek YJ ke bank
   
   vs_distrib_dt varchar2(8);
@@ -40,7 +42,14 @@ BEGIN
             from t_cash_dividen
             where distrib_dt = p_distrib_dt
             and approved_stat = 'A'
-            group by stk_cd),
+            group by stk_cd
+         union
+            select stk_cd, sum(net_amt) net_amt
+            from t_tender_offer_sell
+            where payment_dt = p_distrib_dt
+            and approved_stat = 'A'
+            group by stk_cd
+            ),
          v_broker_subrek,
          ( select dstr1 as subrek, dstr2 as bank_acct, param_cd3 as bank_cd
              from MST_SYS_PARAM

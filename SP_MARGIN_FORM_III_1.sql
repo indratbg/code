@@ -1,5 +1,4 @@
-create or replace 
-PROCEDURE SP_MARGIN_FORM_III_1(
+create or replace PROCEDURE SP_MARGIN_FORM_III_1(
     P_END_DATE DATE,
     P_UPDATE_DATE T_MANY_HEADER.UPDATE_DATE%TYPE,
     P_UPDATE_SEQ T_MANY_HEADER.UPDATE_SEQ%TYPE,
@@ -15,7 +14,8 @@ AS
   V_BGN_DATE  DATE;
   V_BROKER_CD VARCHAR2(2);
   V_NAMA_PRSH mst_company.nama_prsh%TYPE;
-  ---perubahan change ticker code---
+  --20FEB2017 [IN] Lisa request perubahan di form III.1 - hanya stock yg marginable - ada di MST_MARGIN_STK 
+  -- deploy 22feb2017
 BEGIN
 
 
@@ -50,6 +50,22 @@ EXCEPTION
         nama_prsh,
         kode_ab
       )
+      SELECT
+      P_UPDATE_DATE,
+      P_UPDATE_SEQ,
+      P_END_DATE,
+      'HEADER' STK_CD,
+      0 SUM_AMT,
+      0 CNT_MARGIN,
+      V_CRE_DT,
+      P_USER_ID,
+      'E',
+      NULL,
+      NULL,
+      V_NAMA_PRSH,
+      V_BROKER_CD
+      FROM DUAL
+      UNION ALL
     SELECT P_UPDATE_DATE,
       P_UPDATE_SEQ,
       P_END_DATE,
@@ -126,28 +142,35 @@ EXCEPTION
               SUM(a.onh_qty) onh_qty
             FROM
               (SELECT client_cd,
-                nvl(c.stk_cd_new,stk_cd)stk_cd,
+                nvl(c.stk_cd_new,T.stk_cd)stk_cd,
                 NVL( DECODE(trim(NVL(gl_acct_cd,'36')),'36',1,0) * DECODE(db_cr_flg,'D',-1,1) * (total_share_qty + withdrawn_share_qty),0) onh_qty
-              FROM T_STK_MOVEMENT,
+              FROM T_STK_MOVEMENT T,MST_MARGIN_STK S,--20FEB2017 ADD MST_MARGIN_STK
 			  (select stk_cd_old,stk_cd_new from t_change_stk_cd where eff_dt<=P_END_DATE)c
               WHERE doc_dt BETWEEN V_BGN_DATE AND P_END_DATE
-			  and stk_Cd = c.stk_cd_old(+)
+              AND T.STK_CD=S.STK_CD
+              AND S.APPROVED_STAT='A'
+            and T.stk_Cd = c.stk_cd_old(+)
               AND gl_acct_cd = '36'
               AND doc_stat   = '2'
               UNION ALL
               SELECT client_cd,
-                 nvl(c.stk_cd_new,stk_cd)stk_cd,
+                 nvl(c.stk_cd_new,T.stk_cd)stk_cd,
                 qty
-              FROM T_SECU_BAL,
+              FROM T_SECU_BAL T,MST_MARGIN_STK S,--20FEB2017 ADD MST_MARGIN_STK
 			  (select stk_cd_old,stk_cd_new from t_change_stk_cd where eff_dt<=P_END_DATE)c
               WHERE bal_dt   = V_BGN_DATE
-			  and stk_Cd = c.stk_cd_old(+)
+              AND T.STK_CD=S.STK_CD
+              AND S.APPROVED_STAT='A'
+			  and T.stk_Cd = c.stk_cd_old(+)
               AND gl_acct_cd = '36'
               ) a
             GROUP BY a.client_cd,
               a.stk_cd
             ) t,
-            ( SELECT stk_cd, stk_clos FROM T_CLOSE_PRICE WHERE stk_date = P_END_DATE
+            ( SELECT C.stk_cd, C.stk_clos FROM T_CLOSE_PRICE c, MST_MARGIN_STK S  
+              WHERE C.STK_CD=S.STK_CD
+              AND C.stk_date = P_END_DATE
+              AND S.APPROVED_STAT='A'
             ) p
           WHERE t.onh_qty > 0
           AND t.stk_cd    = p.stk_cd
