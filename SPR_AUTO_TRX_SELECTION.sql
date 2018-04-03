@@ -13,6 +13,7 @@ V_ERROR_MSG VARCHAR2(200);
 V_ERROR_CD NUMBER(10);
 v_random_value	NUMBER(10);
 V_ERR EXCEPTION;
+-- RD 31 Juli 2017 edited bank_short_name from v_client_bank
 
  BEGIN
  
@@ -44,7 +45,7 @@ V_ERR EXCEPTION;
 		  Select decode(M.brch,M.branch_code,M.branch_code,M.brch)  branch_code, 
       p.client_cd,brch, m.acct_name as rdi_acct_name, m.bank_acct_fmt,			
 		  payrec_date,curr_amt, remarks, folder_cd, payee_name, 			
-		  payee_acct_num, payee_bank_cd, nvl(v.bank_name,nvl(b.BANK_SHORT_NAME,'-')) as bank_name, nvl(bank_brch_name, '-') bank_branch,		
+		  payee_acct_num, payee_bank_cd, nvl(v.bank_name,nvl(v.BANK_SHORT_NAME,'-')) as bank_name, nvl(bank_brch_name, '-') bank_branch,		
 			trf_fee, decode(payee_bank_cd,'BCA',0,length(payee_name)) as name_length, 1 print_flg, P_USER_ID, V_RANDOM_VALUE,
 			P_GENERATE_DATE
 	from(  select client_cd, REM_CD,  acct_name, 				
@@ -52,8 +53,7 @@ V_ERR EXCEPTION;
 				 brch,branch_code	
 			from( select mst_client.client_cd, REM_CD,  substr(mst_client_flacct.acct_name,1,35) as acct_name, 		
 					mst_client_flacct.bank_acct_fmt,
-					decode(trim(mst_client.rem_cd), 'LOT','LOT',
-                       decode(trim(mst_client.olt),'N',trim(branch_code),'LOT')) as brch,					
+					decode(trim(mst_client.rem_cd), 'LOT','LOT',trim(branch_code)) as brch,					
 				 trim(branch_code) as branch_code	
 				 from mst_client_flacct, mst_client	
 				 where mst_client_flacct.client_cd = mst_client.client_cd	
@@ -120,13 +120,14 @@ V_ERR EXCEPTION;
 				AND MAX(payrec_type) IN ('PV','PD')
 		) p,			
 		  v_client_bank v,			
-		 ( select BANK_CD, BANK_SHORT_NAME			
+		 ( select BANK_CD			
 			from MST_IP_BANK		
 			WHERE APPROVED_STAT='A' ) b		
 		where p.client_cd = m.client_cd			
 		and p.client_cd = v.client_cd(+)			
 		and p.payee_acct_num = v.bank_acct_num(+)			
 		And P.Payee_Bank_Cd = B.BANK_CD(+)
+   -- AND b.BANK_CD = v.BANK_CD--27FEB2018 INDRA
     AND P.DOC_NUM = vp_doc_num(I);			
 								
 	 EXCEPTION

@@ -19,6 +19,8 @@ IS
   v_random_value NUMBER(10);
   V_ERR          EXCEPTION;
   V_BAL_DT       DATE;
+  V_USERID MST_SYS_PARAM.DSTR1%TYPE;
+  V_START_DATE DATE;
 BEGIN
 
   v_random_value := ABS(dbms_random.random);
@@ -38,6 +40,32 @@ BEGIN
     RAISE V_ERR;
   END IF;
   
+  --CEK SYS PARAM 
+  BEGIN
+  SELECT DSTR1,DDATE1 INTO V_USERID,V_START_DATE FROM MST_SYS_PARAM WHERE PARAM_ID='STOCK HISTORY' AND DSTR1=P_USER_ID;
+  EXCEPTION
+  WHEN NO_DATA_FOUND THEN
+    SELECT DSTR1,DDATE1 INTO V_USERID,V_START_DATE FROM MST_SYS_PARAM WHERE PARAM_ID='STOCK HISTORY' AND DSTR1='ALL';
+  WHEN OTHERS THEN
+    V_ERROR_CD  := -23;
+    V_ERROR_MSG := SUBSTR('SELECT START DATE FROM MST_SYS_PARAM '||SQLERRM(SQLCODE),1,200);
+    RAISE V_err;
+  END;
+
+
+  IF P_BGN_DATE < V_START_DATE AND V_USERID=P_USER_ID THEN
+    V_ERROR_CD  := -24;
+    V_ERROR_MSG := 'Tanggal report harus lebih besar dari '||TO_CHAR(V_START_DATE,'DD/MM/YYYY');
+    RAISE V_ERR;
+  
+  ELSIF P_BGN_DATE < V_START_DATE AND V_USERID='ALL' THEN
+      V_ERROR_CD  := -25;
+      V_ERROR_MSG := 'Tanggal report harus lebih besar dari '||TO_CHAR(V_START_DATE,'DD/MM/YYYY');
+      RAISE V_ERR;
+  
+  END IF;
+
+
   V_BAL_DT :=P_BGN_DATE - TO_CHAR(P_BGN_DATE,'DD') +1;
   
   insert into tmp_stk_hist1
@@ -50,8 +78,8 @@ BEGIN
           0 F_qty,
           due_dt_for_cert AS due_date,
           DECODE(SUBSTR(doc_num,5,3),'JVB','BUY','JVS','SELL','JXB','BUY','JXS','SELL','JVA','REPO','JRR','REPO','BRR','REPO',
-          DECODE(SUBSTR(trim(doc_num),5,1),'B','BUY','J','SELL','R','RECEIVE','W','WITHDRAW',SUBSTR(trim(doc_num),5,1))) Trx_cd,
-          trim(doc_rem) doc_rem,
+          DECODE(SUBSTR(doc_num,5,1),'B','BUY','J','SELL','R','RECEIVE','W','WITHDRAW',SUBSTR(doc_num,5,1))) Trx_cd,
+          DECODE(SUBSTR(doc_num,5,1),'B','Beli @ '||price,'J','Jual @ '||price,doc_rem)DOC_NUM,--trim(doc_rem) doc_rem,
           price,
           NVL(approved_dt,cre_dt) cre_dt,
           v_random_value,
@@ -252,7 +280,7 @@ SELECT '00' doc_num,
           SUM(F_beg_qty) f_beg_qty,
           NULL AS due_date,
           NULL trx_Cd,
-          'BEG BAL' AS doc_rem,
+          'BEGINNING BALANCE' AS doc_rem,
           0 price ,
           NULL cre_dt,
           v_random_value,

@@ -12,7 +12,6 @@ create or replace PROCEDURE SPR_HIGH_RISK_ACCT(
     P_END_BRANCH    VARCHAR2,
     P_BGN_REM       VARCHAR2,
     P_END_REM       VARCHAR2,
-    P_BUY_BACK NUMBER,
     P_USER_ID       VARCHAR2,
     P_GENERATE_DATE DATE,
     P_RANDOM_VALUE OUT NUMBER,
@@ -51,9 +50,13 @@ BEGIN
   ELSE
     V_HIGH_RISK_TYPE :='Margin Call Problematic Client';
   END IF;
+  
+    delete from TMP_HRA_CLIENT
+  where rand_value = v_random_value
+    and user_id = p_user_id;
     
     INSERT INTO TMP_HRA_CLIENT
-    SELECT M.client_cd
+    SELECT M.client_cd, V_RANDOM_VALUE, p_user_id
         FROM MST_CLIENT M, LST_TYPE3
         WHERE M.client_type_3 = LST_TYPE3.cl_type3
         AND LST_TYPE3.margin_Cd BETWEEN P_BGN_MARGIN AND P_END_MARGIN
@@ -90,23 +93,32 @@ BEGIN
                 FROM
                   (
                     SELECT TRIM(T.sl_acct_cd) AS sl_acct_cd, 0 beg_bal, DECODE(db_cr_flg, 'D', 1,-1) * T.curr_val AS mvmt
-                    FROM T_ACCOUNT_LEDGER t, TMP_HRA_CLIENT m
+                    FROM T_ACCOUNT_LEDGER t,
+                            ( select client_cd
+                                  from TMP_HRA_CLIENT 
+                                  where rand_value = v_random_value
+                                  and user_id = p_user_id) m
                     WHERE T.doc_date BETWEEN V_BAL_DATE AND P_TRX_DATE
                     --AND M.client_cd  BETWEEN P_BGN_CLIENT AND P_END_CLIENT
                     AND t.sl_acct_cd     = m.client_cd
-                    AND T.record_source <> 'OBAL'
+                    AND T.record_source <> 'RE'
                     AND T.approved_sts  = 'A'
+                    AND T.reversal_jur = 'N'
                     --AND M.susp_stat = 'N'
                     UNION ALL
                     SELECT TRIM(T.sl_acct_cd) AS sl_acct_cd, T.deb_obal - T.cre_obal AS beg_bal, 0 mvmt
                     FROM T_DAY_TRS t, TMP_HRA_CLIENT m
                     WHERE T.trs_dt   = V_BAL_DATE
                     AND t.sl_acct_cd = m.client_cd
+                    and m.rand_value = v_random_value
+                    and m.user_id = p_user_id
                    -- AND M.client_cd  BETWEEN P_BGN_CLIENT AND P_END_CLIENT
                    -- AND M.susp_stat = 'N'
                     UNION ALL
                     SELECT CLIENT_CD, 0 beg_bal, -NVL(F_FUND_BAL(client_cd, P_TRX_DATE),0) mvmt
                     FROM TMP_HRA_CLIENT
+                    where rand_value = v_random_value
+                    and user_id = p_user_id
                    -- WHERE SUSP_STAT = 'N'
                    -- AND client_cd  BETWEEN P_BGN_CLIENT AND P_END_CLIENT
                   )
@@ -124,7 +136,11 @@ BEGIN
                         FROM
                           (
                             SELECT T_STK_MOVEMENT.client_cd, stk_cd, 0 beg_theo, (NVL(DECODE(SUBSTR(doc_num,5,2),'BR',1,'JR',1,'BI',1,'JI',1,'RS',1,'WS',1,0) * DECODE(db_cr_flg,'D',1,-1) * (total_share_qty + withdrawn_share_qty),0)) theo_mvmt
-                            FROM T_STK_MOVEMENT, TMP_HRA_CLIENT m
+                            FROM T_STK_MOVEMENT, 
+                                        ( select client_cd
+                                          from TMP_HRA_CLIENT 
+                                          where rand_value = v_random_value
+                                          and user_id = p_user_id) m
                             WHERE doc_dt BETWEEN V_BAL_DATE AND P_TRX_DATE
                             AND T_STK_MOVEMENT.client_cd  = m.client_cd
                             AND gl_acct_cd IN ('10','12','13','14','51')
@@ -132,7 +148,11 @@ BEGIN
                             AND s_d_type   <> 'V'
                             UNION ALL
                             SELECT T_STKBAL.client_cd, stk_cd, beg_bal_qty, 0 theo_mvmt
-                            FROM T_STKBAL, TMP_HRA_CLIENT m
+                            FROM T_STKBAL,  
+                                        ( select client_cd
+                                          from TMP_HRA_CLIENT 
+                                          where rand_value = v_random_value
+                                          and user_id = p_user_id) m
                             WHERE bal_dt = V_BAL_DATE
                             AND T_STKBAL.client_cd  = m.client_cd
                           )
@@ -162,7 +182,11 @@ BEGIN
               ) SAHAM, 
               (
                 SELECT M.client_cd, branch_code,rem_cd, client_name
-                FROM MST_CLIENT M, TMP_HRA_CLIENT t
+                FROM MST_CLIENT M,  
+                        ( select client_cd
+                          from TMP_HRA_CLIENT 
+                          where rand_value = v_random_value
+                          and user_id = p_user_id) t
                 WHERE T.client_cd  = m.client_cd
               ) mc
             WHERE mc.client_cd           = BALANCE.CLIENT_CD(+)
@@ -170,21 +194,24 @@ BEGIN
             AND (NVL(balance.balance,0) <> 0
             OR NVL(saham.portfolio,0)   <> 0)
           )
-      )
-    WHERE ( (portfolio_pctg  >= P_LIMIT OR 
-                    (portfolio_disct_pctg >= P_LIMIT_disct    AND portfolio_disct_pctg <> 999)
-                    OR portfolio_disct_pctg   = 999 )
-                 AND (P_HRA_TYPE           = 'MC'    OR P_HRA_TYPE             = 'MP') )
-    --OR (P_HRA_TYPE            = 'LB'    AND balance_plus_buyback >= P_LIMIT)
-    OR (P_HRA_TYPE            = 'LB'    AND balance_plus_buyback >= P_BUY_BACK)
-    OR (P_HRA_TYPE            = 'LS'    AND buyback              <> 0)
-    OR (P_HRA_TYPE            = 'LW'    AND portfolio             = 0    AND buyback              <> 0);
+      );
+--    WHERE ( (portfolio_pctg  >= P_LIMIT OR 
+--                    (portfolio_disct_pctg >= P_LIMIT_disct    AND portfolio_disct_pctg <> 999)
+--                    OR portfolio_disct_pctg   = 999 )
+--                 AND (P_HRA_TYPE           = 'MC'    OR P_HRA_TYPE             = 'MP') )
+--    OR (P_HRA_TYPE            = 'LB'    AND balance_plus_buyback >= P_LIMIT)
+--    OR (P_HRA_TYPE            = 'LS'    AND buyback              <> 0)
+--    OR (P_HRA_TYPE            = 'LW'    AND portfolio             = 0    AND buyback              <> 0);
   EXCEPTION
   WHEN OTHERS THEN
     V_ERROR_CD  := -50;
     V_ERROR_MSG := SUBSTR('INSERT INTO R_HIGH_RISK_ACCT '||SQLERRM(SQLCODE),1,200);
     RAISE V_err;
   END;
+  
+    delete from TMP_HRA_CLIENT
+  where rand_value = v_random_value
+    and user_id = p_user_id;
   
   P_RANDOM_VALUE := v_random_value;
   P_ERROR_CD     := 1 ;
